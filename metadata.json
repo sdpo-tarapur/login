@@ -1,0 +1,6 @@
+{
+  "name": "SDPO Tarapur - Police Subdivision Portal",
+  "description": "Comprehensive crime monitoring, FIR tracking, SR/NON-SR designation, 60/90 day investigation deadline compliance, CCTNS upload tracker, and land dispute management portal for Tarapur Police Subdivision.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
