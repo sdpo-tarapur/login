@@ -66,6 +66,8 @@ const DEFAULT_FILTERS: FilterOptions = {
   startDate: '',
   endDate: '',
   deadlineCategories: [],
+  chargesheetStartDate: '',
+  chargesheetEndDate: '',
 };
 
 export default function App() {
@@ -478,8 +480,21 @@ export default function App() {
       if (!match) return false;
     }
 
+    // FIR Registration Date Range Filter
     if (filters.startDate && c.firDate < filters.startDate) return false;
     if (filters.endDate && c.firDate > filters.endDate) return false;
+
+    // Chargesheet Submission Date Range Filter
+    if (filters.chargesheetStartDate) {
+      if (!c.chargesheetDate || c.chargesheetDate < filters.chargesheetStartDate) {
+        return false;
+      }
+    }
+    if (filters.chargesheetEndDate) {
+      if (!c.chargesheetDate || c.chargesheetDate > filters.chargesheetEndDate) {
+        return false;
+      }
+    }
 
     return true;
   });
