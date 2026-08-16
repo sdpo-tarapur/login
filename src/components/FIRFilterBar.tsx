@@ -86,6 +86,7 @@ export const FIRFilterBar: React.FC<FIRFilterBarProps> = ({
       'Statutory Limit',
       'Status',
       'Chargesheet No',
+      'Chargesheet Date',
       'CCTNS Chargesheet Sync',
       'CCTNS Case Diary Sync',
     ];
@@ -101,6 +102,7 @@ export const FIRFilterBar: React.FC<FIRFilterBarProps> = ({
       `${c.deadlineDays} Days`,
       c.status,
       c.chargesheetNumber || 'N/A',
+      c.chargesheetDate || 'N/A',
       c.chargesheetUploadedCCTNS ? 'YES' : 'NO',
       c.caseDiaryUploadedCCTNS ? 'YES' : 'NO',
     ]);
@@ -132,7 +134,7 @@ export const FIRFilterBar: React.FC<FIRFilterBarProps> = ({
   return (
     <div ref={containerRef} className="bg-white dark:bg-slate-900 rounded-xl p-4.5 border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-3.5">
       
-      {/* Top Search Bar, Export Actions & Reset */}
+      {/* Top Search Bar, Quick Limits, Export Actions & Reset */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         
         {/* Search Input */}
@@ -191,7 +193,7 @@ export const FIRFilterBar: React.FC<FIRFilterBarProps> = ({
           </button>
         </div>
 
-        {/* Export Buttons */}
+        {/* Export & Reset Buttons */}
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportExcel}
@@ -514,61 +516,60 @@ export const FIRFilterBar: React.FC<FIRFilterBarProps> = ({
 
       </div>
 
-      // Inside FIRFilterBar component inputs:
+      {/* Date Range Filters Row (FIR Date Range & Chargesheet Date Range) */}
+      <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-6 pt-2 text-xs border-t border-slate-100 dark:border-slate-800">
+        
+        <div className="flex flex-wrap items-center gap-4">
+          
+          {/* FIR Date Range */}
+          <div className="flex items-center gap-2">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-bold text-slate-500 text-[11px] uppercase tracking-wider">
+              FIR Date Range:
+            </span>
+            <input
+              type="date"
+              value={filters.startDate || ''}
+              onChange={(e) => handleChange('startDate', e.target.value)}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs px-2 py-1 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <span className="text-slate-400 text-[11px]">to</span>
+            <input
+              type="date"
+              value={filters.endDate || ''}
+              onChange={(e) => handleChange('endDate', e.target.value)}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs px-2 py-1 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
 
-<div className="flex flex-col">
-  <label className="text-xs font-semibold text-gray-600 mb-1">
-    Chargesheet From
-  </label>
-  <input
-    type="date"
-    className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-    value={filters.chargesheetStartDate || ''}
-    onChange={(e) =>
-      setFilters({ ...filters, chargesheetStartDate: e.target.value })
-    }
-  />
-</div>
+          {/* Chargesheet Date Range (Matched Look) */}
+          <div className="flex items-center gap-2 pl-0 sm:pl-4 sm:border-l sm:border-slate-200 dark:sm:border-slate-700">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <span className="font-bold text-slate-500 text-[11px] uppercase tracking-wider">
+              Chargesheet Date Range:
+            </span>
+            <input
+              type="date"
+              value={filters.chargesheetStartDate || ''}
+              onChange={(e) => handleChange('chargesheetStartDate', e.target.value)}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs px-2 py-1 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <span className="text-slate-400 text-[11px]">to</span>
+            <input
+              type="date"
+              value={filters.chargesheetEndDate || ''}
+              onChange={(e) => handleChange('chargesheetEndDate', e.target.value)}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs px-2 py-1 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
 
-<div className="flex flex-col">
-  <label className="text-xs font-semibold text-gray-600 mb-1">
-    Chargesheet To
-  </label>
-  <input
-    type="date"
-    className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-    value={filters.chargesheetEndDate || ''}
-    onChange={(e) =>
-      setFilters({ ...filters, chargesheetEndDate: e.target.value })
-    }
-  />
-</div>
-      
-      {/* Date Range Inputs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs border-t border-slate-100 dark:border-slate-800">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-          <span className="font-bold text-slate-500 text-[11px] uppercase tracking-wider">
-            FIR Date Range:
-          </span>
-          <input
-            type="date"
-            value={filters.startDate}
-            onChange={(e) => handleChange('startDate', e.target.value)}
-            className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs px-2 py-1 text-slate-900 dark:text-white"
-          />
-          <span className="text-slate-400 text-[11px]">to</span>
-          <input
-            type="date"
-            value={filters.endDate}
-            onChange={(e) => handleChange('endDate', e.target.value)}
-            className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs px-2 py-1 text-slate-900 dark:text-white"
-          />
         </div>
 
+        {/* Matching Case Count */}
         <div className="text-[11px] text-slate-500 font-semibold">
           Showing <strong className="text-slate-900 dark:text-white">{filteredCases.length}</strong> matching case records
         </div>
+
       </div>
 
     </div>
