@@ -514,6 +514,36 @@ export const FIRFilterBar: React.FC<FIRFilterBarProps> = ({
 
       </div>
 
+      // Inside FIRFilterBar component inputs:
+
+<div className="flex flex-col">
+  <label className="text-xs font-semibold text-gray-600 mb-1">
+    Chargesheet From
+  </label>
+  <input
+    type="date"
+    className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+    value={filters.chargesheetStartDate || ''}
+    onChange={(e) =>
+      setFilters({ ...filters, chargesheetStartDate: e.target.value })
+    }
+  />
+</div>
+
+<div className="flex flex-col">
+  <label className="text-xs font-semibold text-gray-600 mb-1">
+    Chargesheet To
+  </label>
+  <input
+    type="date"
+    className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+    value={filters.chargesheetEndDate || ''}
+    onChange={(e) =>
+      setFilters({ ...filters, chargesheetEndDate: e.target.value })
+    }
+  />
+</div>
+      
       {/* Date Range Inputs */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs border-t border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
