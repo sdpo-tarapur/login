@@ -469,15 +469,38 @@ export default function App() {
     const deadlineInfo = getDeadlineInfo(c);
     if (filters.deadlineStatus !== 'ALL' && deadlineInfo.code !== filters.deadlineStatus) return false;
 
+    // Multi-Keyword Robust Search across all FIR, IO, and Supervision fields
     if (filters.searchQuery && filters.searchQuery.trim()) {
-      const q = filters.searchQuery.toLowerCase();
-      const match =
-        c.firNumber.toLowerCase().includes(q) ||
-        c.sections.toLowerCase().includes(q) ||
-        c.complainantName.toLowerCase().includes(q) ||
-        c.placeOfOccurrence.toLowerCase().includes(q) ||
-        c.ioName.toLowerCase().includes(q);
-      if (!match) return false;
+      const keywords = filters.searchQuery
+        .toLowerCase()
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+
+      const searchableCorpus = [
+        c.firNumber,
+        c.ps,
+        c.sections,
+        c.complainantName,
+        c.complainantPhone || '',
+        c.placeOfOccurrence,
+        c.ioName,
+        c.designation,
+        c.status,
+        c.chargesheetNumber || '',
+        c.chargesheetDate || '',
+        c.lastCaseDiaryNo || '',
+        c.sdpoSupervisionNote || '',
+        c.ciSupervisionNote || '',
+        c.psProgressRemarks || '',
+        ...(c.prDates || []),
+        ...(c.caseReviewDates || []),
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      const matchesAllKeywords = keywords.every((kw) => searchableCorpus.includes(kw));
+      if (!matchesAllKeywords) return false;
     }
 
     // FIR Registration Date Range Filter
