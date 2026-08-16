@@ -183,6 +183,18 @@ export interface FilterOptions {
   endDate: string;
   deadlineCategories: DeadlineCategory[]; // Empty array means ALL (both 60 & 90)
 }
+export interface FIRFilters {
+  search: string;
+  ps: string;
+  status: string;
+  designation: string;
+  ioName: string;
+  startDate: string;
+  endDate: string;
+  // Add Chargesheet Date Range filters:
+  chargesheetStartDate: string;
+  chargesheetEndDate: string;
+}
 
 export type PermissionLevel = 'ADMIN' | 'EDITOR' | 'VIEWER';
 
