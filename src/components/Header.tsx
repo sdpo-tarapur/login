@@ -28,6 +28,7 @@ interface HeaderProps {
   onRoleChange: (role: UserRole) => void;
   currentUserAccount: UserAccount | null;
   onOpenUserManagement: () => void;
+  onOpenSupabaseConfig?: () => void;
   onLogout: () => void;
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -47,6 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRoleChange,
   currentUserAccount,
   onOpenUserManagement,
+  onOpenSupabaseConfig,
   onLogout,
   activeTab,
   onTabChange,
@@ -94,22 +96,20 @@ export const Header: React.FC<HeaderProps> = ({
           {/* User Profile, User ID & Role Actions */}
           <div className="flex flex-wrap items-center gap-3 bg-slate-800/90 dark:bg-slate-900 p-2 rounded-xl border border-slate-700/80 shadow-xs">
             
-            {/* Supabase Status Pill */}
-            <div
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 border ${
+            {/* Supabase Status Button */}
+            <button
+              type="button"
+              onClick={onOpenSupabaseConfig}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 border transition cursor-pointer ${
                 isSupabaseConfigured()
-                  ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800'
-                  : 'bg-amber-950/70 text-amber-300 border-amber-800'
+                  ? 'bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border-emerald-800'
+                  : 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-800'
               }`}
-              title={
-                isSupabaseConfigured()
-                  ? 'Supabase Cloud Database connected and active'
-                  : 'Local Storage Mode. Add VITE_SUPABASE_URL to .env for Cloud Sync'
-              }
+              title="Click to configure Supabase Cloud Database & run diagnostics"
             >
-              <Database className="w-3 h-3 shrink-0" />
-              <span>{isSupabaseConfigured() ? 'Supabase Connected' : 'Local Storage'}</span>
-            </div>
+              <Database className="w-3 h-3 shrink-0 text-emerald-400" />
+              <span>{isSupabaseConfigured() ? 'Supabase Connected' : 'Local Storage (Setup DB)'}</span>
+            </button>
 
             {/* Authenticated Officer Info Badge */}
             {currentUserAccount ? (
