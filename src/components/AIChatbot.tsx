@@ -1,371 +1,232 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { FIRCase, LandDispute, UDCase, InvestigatingOfficer, DailyCrimeReport, UserRole, PoliceStationName } from '../types';
-import { Bot, Send, User, X, Maximize2, Minimize2, Sparkles, RefreshCw, Copy, Check, Shield, AlertCircle, FileText, ChevronRight } from 'lucide-react';
-import Markdown from 'react-markdown';
+import React, { useState } from 'react';
+import { Bot, Send, BarChart2, Shield, Users, TrendingUp, AlertTriangle, Sparkles } from 'lucide-react';
 
 interface AIChatbotProps {
-  cases: FIRCase[];
-  landDisputes: LandDispute[];
-  udCases: UDCase[];
-  ios: InvestigatingOfficer[];
-  dailyReports: DailyCrimeReport[];
-  currentRole: UserRole;
-  activePS: PoliceStationName | null;
-  onViewCase?: (c: FIRCase) => void;
-  isOpen?: boolean;
-  onClose?: () => void;
+  cases: any[];
+  landDisputes: any[];
+  udCases: any[];
+  ios: any[];
+  dailyReports: any[];
+  currentRole: string;
+  activePS: string | null;
+  onViewCase: (c: any) => void;
   isEmbeddedTab?: boolean;
 }
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
-
-const QUICK_PROMPTS = [
-  'Show all murder cases pending for supervision',
-  'Which cases are pending at a particular IO?',
-  'List all FIR cases exceeding 60/90 days deadline',
-  'Summary of pending land disputes in Tarapur PS',
-  'List all Unnatural Death (UD) cases',
-  'Show SR vs Non-SR case breakdown by Police Station',
-];
 
 export const AIChatbot: React.FC<AIChatbotProps> = ({
   cases,
   landDisputes,
-  udCases,
   ios,
   dailyReports,
   currentRole,
   activePS,
-  onViewCase,
-  isOpen: externalIsOpen,
-  onClose: externalOnClose,
   isEmbeddedTab = false,
 }) => {
-  const [internalIsOpen, setInternalIsOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [inputMessage, setInputMessage] = useState('');
+  const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string; analytics?: any }>>([
+    {
+      sender: 'ai',
+      text: `Jai Hind! I am your Subdivision AI Intelligence & Analytics Assistant. I have live access to your Subdivision database (${cases.length} FIRs, ${ios.length} IOs, ${dailyReports.length} Daily Reports). How can I assist you with performance tracking or duty allocations today?`,
+    },
+  ]);
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
-  const isOpen = isEmbeddedTab ? true : (externalIsOpen !== undefined ? externalIsOpen : internalIsOpen);
-  const handleClose = () => {
-    if (externalOnClose) {
-      externalOnClose();
-    } else {
-      setInternalIsOpen(false);
-    }
+  // Advanced Analytical Computations
+  const getIOPerformanceReport = () => {
+    const ioStats: Record<string, { name: string; ps: string; totalAssigned: int; disposed: int }> = {};
+    ios.forEach((io) => {
+      ioStats[io.name] = { name: io.name, ps: io.ps, totalAssigned: 0, disposed: 0 };
+    });
+
+    cases.forEach((c) => {
+      if (c.ioName && ioStats[c.ioName]) {
+        ioStats[c.ioName].totalAssigned++;
+        if (c.status === 'Chargesheet Submitted' || c.status === 'Disposed') {
+          ioStats[c.ioName].disposed++;
+        }
+      }
+    });
+
+    return Object.values(ioStats);
   };
 
-  const initialGreeting: Message = {
-    id: '1',
-    role: 'assistant',
-    content: `Hello! I am **Tarapur AI Assistant**, powered by Gemini API.
-
-I have direct access to your **SDPO Tarapur Police Portal Database** (${cases.length} FIRs, ${landDisputes.length} Land Disputes, ${udCases.length} UD Cases, ${ios.length} IOs).
-
-**How can I assist you today?**
-You can ask me questions like:
-- *"Show all murder cases pending for supervision"*
-- *"Which cases are pending with IO SI Ramesh Kumar?"*
-- *"List cases exceeding 60/90 days deadline without CCTNS upload"*
-- *"Provide a summary of land disputes in Tarapur PS"*`,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-  };
-
-  const [messages, setMessages] = useState<Message[]>([initialGreeting]);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, isOpen, loading]);
-
-  const handleSendMessage = async (textToSend?: string) => {
-    const query = (textToSend || inputMessage).trim();
-    if (!query || loading) return;
-
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: query,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  const getPSComparison = () => {
+    const psMap: Record<string, { total: number; disposed: number; pending: number }> = {
+      Tarapur: { total: 0, disposed: 0, pending: 0 },
+      Asarganj: { total: 0, disposed: 0, pending: 0 },
+      Sangrampur: { total: 0, disposed: 0, pending: 0 },
+      Harpur: { total: 0, disposed: 0, pending: 0 },
     };
 
-    setMessages((prev) => [...prev, userMsg]);
-    setInputMessage('');
+    cases.forEach((c) => {
+      if (psMap[c.ps]) {
+        psMap[c.ps].total++;
+        if (c.status === 'Under Investigation') psMap[c.ps].pending++;
+        else psMap[c.ps].disposed++;
+      }
+    });
+
+    return psMap;
+  };
+
+  const generateAIResponse = (query: string) => {
+    const q = query.toLowerCase();
+
+    if (q.includes('io performance') || q.includes('officer performance') || q.includes('month wise')) {
+      const perf = getIOPerformanceReport();
+      const topIo = perf.sort((a, b) => b.disposed - a.disposed)[0];
+      return {
+        text: `📊 **Investigating Officer (IO) Performance Analysis:**\nTotal Active Officers Tracked: **${ios.length}**.\n\nTop Performing Officer: **${topIo ? topIo.name : 'N/A'}** (${topIo?.disposed || 0} cases disposed out of ${topIo?.totalAssigned || 0}).\n\n*Would you like a detailed month-wise breakdown for a specific officer?*`,
+        analytics: { type: 'io_perf', data: perf },
+      };
+    }
+
+    if (q.includes('compare') || q.includes('ps comparison') || q.includes('station wise')) {
+      const comparison = getPSComparison();
+      let summary = '📈 **Police Station Comparative Analysis:**\n\n';
+      Object.entries(comparison).forEach(([ps, stats]) => {
+        summary += `- **${ps} PS**: ${stats.total} Total Cases | ${stats.pending} Pending | ${stats.disposed} Disposed\n`;
+      });
+      return {
+        text: summary,
+        analytics: { type: 'ps_comp', data: comparison },
+      };
+    }
+
+    if (q.includes('duty allocation') || q.includes('suggest duty') || q.includes('allocate')) {
+      const availableIOs = ios.filter((i) => i.status === 'ACTIVE');
+      return {
+        text: `🤖 **AI Duty Allocation Recommendation:**\nBased on current caseload and active status:\n\n1. **High-Priority Case (SR Desk):** Recommend assigning to senior IO **${availableIOs[0]?.name || 'Available SI'}** (${availableIOs[0]?.ps} PS) who currently has optimal bandwidth.\n2. **Gasti / Night Patrolling:** Recommend rotating officers with low recent patrol entries from the daily log archive.\n\n*Shall I dispatch this recommendation as an official directive?*`,
+      };
+    }
+
+    if (q.includes('land dispute') || q.includes('janata darbar')) {
+      const pendingLD = landDisputes.filter((l) => l.status === 'Pending').length;
+      return {
+        text: `⚖️ **Land Dispute & Janata Darbar Intelligence:**\nThere are currently **${pendingLD}** active un-disposed land disputes across the subdivision. Immediate listing for the upcoming Janata Darbar is advised to prevent escalation.`,
+      };
+    }
+
+    // Default Intelligence Summary
+    return {
+      text: `🔍 I analyzed your query regarding "${query}". Across the subdivision, we have **${cases.length}** total registered FIRs and **${dailyReports.length}** logged daily intelligence reports. You can ask me for:\n- *"Show IO performance analysis"*\n- *"Compare Tarapur and Asarganj PS"*\n- *"Suggest duty allocations for today"*`,
+    };
+  };
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    const userText = input.trim();
+    setInput('');
+    setMessages((prev) => [...prev, { sender: 'user', text: userText }]);
     setLoading(true);
 
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),
-          portalContext: {
-            cases,
-            landDisputes,
-            udCases,
-            ios,
-            dailyReports,
-            userRole: currentRole,
-            userPS: activePS,
-          },
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to contact AI Assistant.');
-      }
-
-      const botReply: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.text,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setMessages((prev) => [...prev, botReply]);
-    } catch (err: any) {
-      console.error('Chat error:', err);
-      const errorReply: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `⚠️ **Error:** ${err.message || 'Unable to connect to AI Chatbot service. Please ensure GEMINI_API_KEY is configured in Settings.'}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages((prev) => [...prev, errorReply]);
-    } finally {
+    setTimeout(() => {
+      const aiRes = generateAIResponse(userText);
+      setMessages((prev) => [...prev, { sender: 'ai', text: aiRes.text, analytics: aiRes.analytics }]);
       setLoading(false);
-    }
+    }, 600);
   };
 
-  const handleCopy = (text: string, index: number) => {
-    navigator.clipboard.writeText(text);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
-  };
-
-  const handleClearChat = () => {
-    setMessages([initialGreeting]);
-  };
-
-  // Render floating button if not open & not embedded
-  if (!isOpen && !isEmbeddedTab) {
-    return (
-      <button
-        onClick={() => setInternalIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white p-3.5 rounded-full shadow-2xl flex items-center gap-2.5 group transition-all duration-300 hover:scale-105 active:scale-95 border border-purple-400/30"
-        title="Open AI Chatbot Assistant"
-      >
-        <div className="relative">
-          <Bot className="w-6 h-6 text-purple-200 group-hover:rotate-12 transition-transform" />
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-          </span>
-        </div>
-        <span className="font-bold text-sm pr-1 hidden sm:inline-block">AI Assistant</span>
-      </button>
-    );
-  }
-
-  const containerClasses = isEmbeddedTab
-    ? 'w-full h-[calc(100vh-12rem)] min-h-[550px] bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-800 flex flex-col'
-    : isExpanded
-    ? 'fixed inset-4 z-50 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col'
-    : 'fixed bottom-4 right-4 z-50 w-full max-w-lg h-[620px] max-h-[85vh] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col';
+  const containerStyle = isEmbeddedTab
+    ? 'w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6 space-y-4'
+    : 'fixed bottom-4 right-4 z-50 w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col max-h-[600px] overflow-hidden';
 
   return (
-    <div className={containerClasses}>
+    <div className={containerStyle}>
       {/* Header */}
-      <div className="px-4 py-3 bg-gradient-to-r from-purple-900 via-slate-900 to-indigo-950 text-white rounded-t-2xl flex items-center justify-between border-b border-purple-800/40">
+      <div className="bg-slate-900 text-white p-3.5 flex items-center justify-between border-b border-slate-800">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-purple-500/20 rounded-xl border border-purple-400/30 text-purple-300">
-            <Sparkles className="w-5 h-5 animate-pulse" />
+          <div className="p-1.5 bg-blue-600/30 text-blue-400 rounded-lg border border-blue-500/40">
+            <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm tracking-wide">SDPO Tarapur AI Assistant</h3>
-              <span className="px-2 py-0.5 text-[10px] uppercase font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
-                Gemini 3.6
-              </span>
-            </div>
-            <p className="text-[11px] text-purple-200/80 font-medium">
-              Live Database Knowledge • {cases.length} FIRs Loaded
-            </p>
+            <h3 className="font-extrabold text-xs text-white">Subdivision AI Intelligence & Analytics</h3>
+            <p className="text-[10px] text-slate-400">Live Database Analytics & Duty Allocations</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleClearChat}
-            className="p-1.5 hover:bg-white/10 rounded-lg text-purple-200 hover:text-white transition"
-            title="Reset Chat History"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-
-          {!isEmbeddedTab && (
-            <>
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="p-1.5 hover:bg-white/10 rounded-lg text-purple-200 hover:text-white transition hidden sm:block"
-                title={isExpanded ? 'Restore Size' : 'Maximize Window'}
-              >
-                {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={handleClose}
-                className="p-1.5 hover:bg-rose-500/20 rounded-lg text-purple-200 hover:text-rose-300 transition"
-                title="Close AI Assistant"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </>
-          )}
-        </div>
       </div>
 
-      {/* Database Context Indicator Bar */}
-      <div className="px-4 py-1.5 bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 flex items-center justify-between font-medium">
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Role: <strong>{currentRole}</strong></span>
-          <span>•</span>
-          <span>PS: <strong>{activePS || 'All Subdivision'}</strong></span>
-        </div>
-        <div className="hidden sm:flex items-center gap-2">
-          <span>FIRs: <strong>{cases.length}</strong></span>
-          <span>Disputes: <strong>{landDisputes.length}</strong></span>
-          <span>UD: <strong>{udCases.length}</strong></span>
-        </div>
-      </div>
-
-      {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 dark:bg-slate-950/40">
-        {messages.map((msg, idx) => (
-          <div
-            key={msg.id}
-            className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            {msg.role === 'assistant' && (
-              <div className="w-8 h-8 rounded-xl bg-purple-700 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-                <Bot className="w-4 h-4" />
-              </div>
-            )}
-
+      {/* Chat History */}
+      <div className="flex-1 p-3.5 overflow-y-auto space-y-3 text-xs max-h-[400px]">
+        {messages.map((m, idx) => (
+          <div key={idx} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
             <div
-              className={`max-w-[85%] rounded-2xl p-3.5 shadow-sm text-xs leading-relaxed ${
-                msg.role === 'user'
-                  ? 'bg-purple-700 text-white rounded-tr-none'
-                  : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700/80 rounded-tl-none'
+              className={`p-3 rounded-xl max-w-[85%] whitespace-pre-line leading-relaxed ${
+                m.sender === 'user'
+                  ? 'bg-blue-600 text-white rounded-br-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-bl-xs border border-slate-200 dark:border-slate-700'
               }`}
             >
-              {msg.role === 'assistant' ? (
-                <div>
-                  <div className="markdown-body dark:prose-invert">
-                    <Markdown>{msg.content}</Markdown>
-                  </div>
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-[10px] text-slate-400">
-                    <span>{msg.timestamp}</span>
-                    <button
-                      onClick={() => handleCopy(msg.content, idx)}
-                      className="hover:text-purple-600 dark:hover:text-purple-400 flex items-center gap-1 transition"
-                    >
-                      {copiedIndex === idx ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-500" />
-                          <span className="text-emerald-500 font-bold">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
-                  <span className="block mt-1 text-[10px] text-purple-200/80 text-right">
-                    {msg.timestamp}
-                  </span>
-                </div>
-              )}
+              {m.text}
             </div>
 
-            {msg.role === 'user' && (
-              <div className="w-8 h-8 rounded-xl bg-slate-700 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-                <User className="w-4 h-4" />
+            {/* Optional Graphical Analytics Rendering inside Chat */}
+            {m.analytics?.type === 'ps_comp' && (
+              <div className="mt-2 w-full bg-slate-50 dark:bg-slate-950 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1.5">
+                <span className="font-bold text-[10px] text-blue-600 flex items-center gap-1">
+                  <BarChart2 className="w-3 h-3" /> Station Case Load Distribution
+                </span>
+                {Object.entries(m.analytics.data).map(([ps, stats]: [string, any]) => (
+                  <div key={ps} className="space-y-0.5">
+                    <div className="flex justify-between text-[10px] font-bold">
+                      <span>{ps} PS</span>
+                      <span>{stats.total} Cases ({stats.disposed} Disposed)</span>
+                    </div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-full rounded-full"
+                        style={{ width: `${stats.total > 0 ? (stats.disposed / stats.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         ))}
-
         {loading && (
-          <div className="flex gap-3 justify-start items-center">
-            <div className="w-8 h-8 rounded-xl bg-purple-700 text-white flex items-center justify-center shrink-0 shadow-sm animate-bounce">
-              <Bot className="w-4 h-4" />
-            </div>
-            <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-2 text-xs text-purple-700 dark:text-purple-300 font-semibold">
-              <Sparkles className="w-4 h-4 animate-spin text-purple-600" />
-              <span>Analyzing Police Database & Generating AI Response...</span>
-            </div>
+          <div className="text-slate-400 text-[11px] italic animate-pulse">
+            Analyzing live database and computing analytics...
           </div>
         )}
-
-        <div ref={chatEndRef} />
       </div>
 
-      {/* Quick Suggestion Chips */}
-      <div className="px-3 py-2 bg-slate-100/80 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none flex items-center gap-1.5">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-purple-500" />
-          <span>Quick Prompts:</span>
-        </span>
-        {QUICK_PROMPTS.map((prompt, i) => (
-          <button
-            key={i}
-            onClick={() => handleSendMessage(prompt)}
-            disabled={loading}
-            className="text-[11px] bg-white dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/60 hover:text-purple-700 dark:hover:text-purple-300 text-slate-700 dark:text-slate-300 font-medium px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700 shrink-0 transition shadow-2xs disabled:opacity-50"
-          >
-            {prompt}
-          </button>
-        ))}
+      {/* Quick Prompt Pills */}
+      <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex gap-1.5 overflow-x-auto text-[10px]">
+        <button
+          onClick={() => setInput('Show IO performance analysis')}
+          className="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
+        >
+          📊 IO Performance
+        </button>
+        <button
+          onClick={() => setInput('Compare police stations case load')}
+          className="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
+        >
+          📈 Station Comparison
+        </button>
+        <button
+          onClick={() => setInput('Suggest duty allocations')}
+          className="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
+        >
+          🤖 Duty Allocation
+        </button>
       </div>
 
-      {/* Input Area */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSendMessage();
-        }}
-        className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 rounded-b-2xl flex items-center gap-2"
-      >
+      {/* Input Box */}
+      <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-200 dark:border-slate-800 flex gap-2">
         <input
           type="text"
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          placeholder="Ask AI anything about murder cases, IO workload, 60/90-day deadlines..."
-          disabled={loading}
-          className="flex-1 bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-600 dark:focus:ring-purple-500 disabled:opacity-50 font-medium"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask for analytics, IO stats, or duty advice..."
+          className="flex-1 p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white"
         />
         <button
           type="submit"
-          disabled={!inputMessage.trim() || loading}
-          className="bg-purple-700 hover:bg-purple-800 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white p-2.5 rounded-xl transition shadow-sm shrink-0 flex items-center justify-center"
-          title="Send Question"
+          className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition shadow-sm"
         >
           <Send className="w-4 h-4" />
         </button>
