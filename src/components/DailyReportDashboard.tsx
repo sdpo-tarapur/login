@@ -50,6 +50,7 @@ interface DailyReportDashboardProps {
   onUpdateLeaveStatus?: (leaveId: string, status: 'ON_LEAVE' | 'ARRIVED' | 'OVERDUE', actualArrivalDate?: string) => void;
   onAddLeaveEntry?: (entry: LeaveLedgerEntry) => void;
   onDeleteLeaveEntry?: (leaveId: string) => void;
+  isReadOnly?: boolean;
 }
 
 const ALL_PS: PoliceStationName[] = ['Tarapur', 'Asarganj', 'Sangrampur', 'Harpur'];
@@ -66,6 +67,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
   onUpdateLeaveStatus,
   onAddLeaveEntry,
   onDeleteLeaveEntry,
+  isReadOnly = false,
 }) => {
   const isSuperUser = currentRole === 'SDPO';
   const todayStr = new Date().toISOString().split('T')[0];
@@ -498,7 +500,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
               Total Arresting in Month
             </span>
-            {isSuperUser && (
+            {isSuperUser && !isReadOnly && (
               <button
                 onClick={() => {
                   setCustomArrestInput(String(finalMonthlyArrests));
@@ -521,7 +523,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
           <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
             <span>Month: {currentMonthKey}</span>
-            {isSuperUser ? (
+            {isSuperUser && !isReadOnly ? (
               <span className="text-[10px] text-blue-600 font-bold hover:underline cursor-pointer" onClick={() => setIsEditingArrests(true)}>
                 Edit Override
               </span>
@@ -941,46 +943,50 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
 
                       {/* Actions */}
                       <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {item.status !== 'ARRIVED' ? (
-                            <button
-                              type="button"
-                              onClick={() => onUpdateLeaveStatus && onUpdateLeaveStatus(item.id, 'ARRIVED', todayStr)}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center gap-1 cursor-pointer"
-                              title="Mark Officer as Returned / Arrived at Police Station"
-                            >
-                              <UserCheck className="w-3.5 h-3.5" />
-                              <span>Mark Arrived</span>
-                            </button>
-                          ) : (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                                Arrived
-                              </span>
-                              {onUpdateLeaveStatus && (
-                                <button
-                                  type="button"
-                                  onClick={() => onUpdateLeaveStatus(item.id, 'ON_LEAVE')}
-                                  className="text-[10px] text-slate-400 hover:text-slate-600 underline"
-                                  title="Revert back to on leave"
-                                >
-                                  Undo
-                                </button>
-                              )}
-                            </div>
-                          )}
+                        {!isReadOnly ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            {item.status !== 'ARRIVED' ? (
+                              <button
+                                type="button"
+                                onClick={() => onUpdateLeaveStatus && onUpdateLeaveStatus(item.id, 'ARRIVED', todayStr)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center gap-1 cursor-pointer"
+                                title="Mark Officer as Returned / Arrived at Police Station"
+                              >
+                                <UserCheck className="w-3.5 h-3.5" />
+                                <span>Mark Arrived</span>
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                                  Arrived
+                                </span>
+                                {onUpdateLeaveStatus && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onUpdateLeaveStatus(item.id, 'ON_LEAVE')}
+                                    className="text-[10px] text-slate-400 hover:text-slate-600 underline"
+                                    title="Revert back to on leave"
+                                  >
+                                    Undo
+                                  </button>
+                                )}
+                              </div>
+                            )}
 
-                          {onDeleteLeaveEntry && (
-                            <button
-                              type="button"
-                              onClick={() => onDeleteLeaveEntry(item.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 transition"
-                              title="Delete entry"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
+                            {onDeleteLeaveEntry && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteLeaveEntry(item.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                title="Delete entry"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">View Only</span>
+                        )}
                       </td>
                     </tr>
                   );
