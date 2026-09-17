@@ -397,6 +397,17 @@ export async function saveIOToSupabase(io: any): Promise<boolean> {
   }
 }
 
+export async function deleteIOFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('investigating_officers').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 // ==========================================
 // 7. LEAVE LEDGER
 // ==========================================
@@ -418,6 +429,17 @@ export async function saveLeaveLedgerEntryToSupabase(entry: any): Promise<boolea
   if (!client) return false;
   try {
     const { error } = await client.from('leave_ledger').upsert([entry]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteLeaveLedgerEntryFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('leave_ledger').delete().eq('id', id);
     return !error;
   } catch {
     return false;
@@ -451,6 +473,17 @@ export async function saveLandDisputeToSupabase(dispute: any): Promise<boolean> 
   }
 }
 
+export async function deleteLandDisputeFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('land_disputes').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 // ==========================================
 // 9. UD CASES
 // ==========================================
@@ -472,6 +505,17 @@ export async function saveUDCaseToSupabase(udCase: any): Promise<boolean> {
   if (!client) return false;
   try {
     const { error } = await client.from('ud_cases').upsert([udCase]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteUDCaseFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('ud_cases').delete().eq('id', id);
     return !error;
   } catch {
     return false;
@@ -505,6 +549,17 @@ export async function saveDailyReportToSupabase(report: any): Promise<boolean> {
   }
 }
 
+export async function deleteDailyReportFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('daily_crime_reports').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 // ==========================================
 // 11. USER MESSAGES & DIRECTIVES
 // ==========================================
@@ -526,6 +581,64 @@ export async function saveUserMessageToSupabase(msg: any): Promise<boolean> {
   if (!client) return false;
   try {
     const { error } = await client.from('user_messages').upsert([msg]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteUserMessageFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('user_messages').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ==========================================
+// 12. MONTHLY ARREST OVERRIDES / ADJUSTMENTS
+// ==========================================
+
+export async function fetchMonthlyArrestOverridesFromSupabase(): Promise<Record<string, number>> {
+  const client = getSupabase();
+  if (!client) return {};
+  try {
+    const { data, error } = await client.from('monthly_arrest_adjustments').select('*');
+    if (error || !data) return {};
+    
+    const overridesMap: Record<string, number> = {};
+    data.forEach((row: any) => {
+      const key = `${row.month_key}_${row.ps || 'ALL'}`;
+      overridesMap[key] = row.adjusted_figure;
+    });
+    return overridesMap;
+  } catch {
+    return {};
+  }
+}
+
+export async function saveMonthlyArrestOverrideToSupabase(
+  monthKey: string,
+  ps: string,
+  figure: number,
+  updatedBy: string
+): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const payload = {
+      month_key: monthKey,
+      ps: ps || 'ALL',
+      adjusted_figure: figure,
+      updated_by: updatedBy,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await client.from('monthly_arrest_adjustments').upsert([payload], {
+      onConflict: 'month_key,ps',
+    }).select();
     return !error;
   } catch {
     return false;
