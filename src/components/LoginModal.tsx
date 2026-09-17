@@ -138,37 +138,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, accounts, onLogi
             </button>
           </form>
 
-          {/* Quick Login Accounts Assistance */}
-          <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700/70 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Official Account Credentials
-              </span>
-              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Click to autofill</span>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {accounts.filter((a) => a.isActive).slice(0, 4).map((acc) => (
-                <button
-                  key={acc.id}
-                  type="button"
-                  onClick={() => {
-                    setUserId(acc.userId);
-                    setPassword(acc.password);
-                    setErrorMessage('');
-                  }}
-                  className="text-left p-2 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-950/50 border border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 rounded-lg transition text-[11px] group cursor-pointer"
-                >
-                  <div className="font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
-                    {acc.rank.split('(')[0].trim()}
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono flex items-center justify-between mt-0.5">
-                    <span className="font-bold text-blue-600 dark:text-blue-400">{acc.userId}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Security Note */}
           <div className="pt-3 border-t border-slate-200 dark:border-slate-800 text-center">
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
