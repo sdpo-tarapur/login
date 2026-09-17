@@ -1,6 +1,6 @@
 import { FIRCase, LandDispute, UDCase, InvestigatingOfficer, DailyCrimeReport, UserAccount, UserMessage, LeaveLedgerEntry } from '../types';
 
-export const INITIAL_USER_ACCOUNTS: UserAccount[] = [
+/*export const INITIAL_USER_ACCOUNTS: UserAccount[] = [
   {
     id: 'user-sdpo',
     userId: 'sdpo.tarapur',
@@ -168,6 +168,6 @@ export const INITIAL_LEAVE_LEDGER: LeaveLedgerEntry[] = [
     recordedBy: 'SHO Sangrampur PS',
     createdAt: new Date().toISOString(),
   },
-];
+]; */
 
 
