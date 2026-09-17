@@ -1,10 +1,10 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// Retrieve Supabase URL & Anon Key from localStorage first, then fallback to import.meta.env
 export function getSupabaseCredentials(): { url: string; anonKey: string; isConfigured: boolean } {
   let url = '';
   let anonKey = '';
 
-  // 1. Try reading from localStorage (runtime configuration modal)
   try {
     const savedUrl = localStorage.getItem('sdpo_supabase_url');
     const savedKey = localStorage.getItem('sdpo_supabase_anon_key');
@@ -14,7 +14,6 @@ export function getSupabaseCredentials(): { url: string; anonKey: string; isConf
     // localStorage not accessible
   }
 
-  // 2. Fallback to Vite environment variables from build/deployment
   if (!url || !anonKey) {
     const metaEnv = (import.meta as unknown as { env: Record<string, string> }).env || {};
     if (!url) url = (metaEnv.VITE_SUPABASE_URL || '').trim();
@@ -26,7 +25,8 @@ export function getSupabaseCredentials(): { url: string; anonKey: string; isConf
     Boolean(anonKey) &&
     url.startsWith('https://') &&
     url !== 'https://your-project-ref.supabase.co' &&
-    anonKey !== 'your-anon-public-key';
+    anonKey !== 'your-anon-public-key' &&
+    anonKey.length > 20;
 
   return { url, anonKey, isConfigured };
 }
@@ -42,9 +42,7 @@ let lastUsedKey = '';
 
 export function getSupabase(): SupabaseClient | null {
   const { url, anonKey, isConfigured } = getSupabaseCredentials();
-  
   if (!isConfigured) {
-    console.warn("Supabase is not configured. Please check your environment variables or settings.");
     cachedClient = null;
     return null;
   }
@@ -56,8 +54,8 @@ export function getSupabase(): SupabaseClient | null {
   try {
     cachedClient = createClient(url, anonKey, {
       auth: {
-        persistSession: true,
-        autoRefreshToken: true,
+        persistSession: false,
+        autoRefreshToken: false,
       },
     });
     lastUsedUrl = url;
@@ -69,19 +67,19 @@ export function getSupabase(): SupabaseClient | null {
   }
 }
 
-// Proxy export for backward compatibility so `supabase.from(...)` always connects to the active client
+// Proxy export for backward compatibility so `supabase.from(...)` always uses the active client
 export const supabase = new Proxy({} as SupabaseClient, {
   get(_target, prop) {
     const client = getSupabase();
     if (!client) {
-      console.error(`Attempted to access supabase.${String(prop)}, but Supabase client is not initialized.`);
+      // Return a safe dummy handler if client is not configured
       if (prop === 'from') {
         return () => ({
-          select: () => Promise.resolve({ data: null, error: { message: 'Supabase is not configured or credentials are invalid.' } }),
-          insert: () => Promise.resolve({ data: null, error: { message: 'Supabase is not configured or credentials are invalid.' } }),
-          upsert: () => Promise.resolve({ data: null, error: { message: 'Supabase is not configured or credentials are invalid.' } }),
-          update: () => Promise.resolve({ data: null, error: { message: 'Supabase is not configured or credentials are invalid.' } }),
-          delete: () => Promise.resolve({ data: null, error: { message: 'Supabase is not configured or credentials are invalid.' } }),
+          select: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
+          upsert: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
+          insert: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
+          delete: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
+          update: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
         });
       }
       return undefined;
@@ -97,15 +95,15 @@ export function saveSupabaseConfig(url: string, anonKey: string): { success: boo
     const cleanKey = anonKey.trim();
 
     if (!cleanUrl.startsWith('https://')) {
-      return { success: false, error: 'Supabase URL must start with https://' };
+      return { success: false, error: 'Supabase URL must start with https:// (e.g. https://yourproject.supabase.co)' };
     }
-    if (!cleanKey) {
-      return { success: false, error: 'API Key cannot be empty.' };
+    if (cleanKey.length < 20) {
+      return { success: false, error: 'Invalid Anon API Key. Please provide a valid Supabase public anon key.' };
     }
 
     localStorage.setItem('sdpo_supabase_url', cleanUrl);
     localStorage.setItem('sdpo_supabase_anon_key', cleanKey);
-    cachedClient = null; // Force client recreation
+    cachedClient = null; // force reload client
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Failed to save configuration' };
@@ -122,7 +120,7 @@ export function clearSupabaseConfig(): void {
   }
 }
 
-// SQL Schema script required by SupabaseConfigModal
+// SQL Schema for the user to run in Supabase SQL Editor
 export const SUPABASE_SQL_SETUP_SCRIPT = `-- ====================================================================
 -- TARAPUR POLICE SUBDIVISION PORTAL - SUPABASE POSTGRESQL DATABASE SCHEMA
 -- Execute this script in your Supabase Project -> SQL Editor
@@ -217,10 +215,10 @@ CREATE TABLE IF NOT EXISTS public.daily_crime_reports (
   date TEXT NOT NULL,
   firs_registered_count INTEGER DEFAULT 0,
   registered_firs JSONB DEFAULT '[]'::jsonb,
-  od_details TEXT,
-  gasti_details TEXT,
+  od_details JSONB DEFAULT '{}'::jsonb,
+  gasti_details JSONB DEFAULT '{}'::jsonb,
   arrests_count INTEGER DEFAULT 0,
-  arrest_details TEXT,
+  arrest_details JSONB DEFAULT '{}'::jsonb,
   rank_strengths JSONB DEFAULT '[]'::jsonb,
   leave_ledger_entries JSONB DEFAULT '[]'::jsonb,
   seizures_summary TEXT,
@@ -289,7 +287,45 @@ CREATE TABLE IF NOT EXISTS public.monthly_arrest_adjustments (
   PRIMARY KEY (month_key, ps)
 );
 
--- 10. DISABLE ROW LEVEL SECURITY (RLS) FOR DIRECT APP SYNC ACCESS
+-- 10. IDEMPOTENT COLUMN MIGRATION CHECKS (Safe to run multiple times)
+DO $$
+BEGIN
+  -- Daily Crime Reports missing column migrations
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='arrest_details') THEN
+    ALTER TABLE public.daily_crime_reports ADD COLUMN arrest_details JSONB DEFAULT '{}'::jsonb;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='od_details') THEN
+    ALTER TABLE public.daily_crime_reports ADD COLUMN od_details JSONB DEFAULT '{}'::jsonb;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='gasti_details') THEN
+    ALTER TABLE public.daily_crime_reports ADD COLUMN gasti_details JSONB DEFAULT '{}'::jsonb;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='registered_firs') THEN
+    ALTER TABLE public.daily_crime_reports ADD COLUMN registered_firs JSONB DEFAULT '[]'::jsonb;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='rank_strengths') THEN
+    ALTER TABLE public.daily_crime_reports ADD COLUMN rank_strengths JSONB DEFAULT '[]'::jsonb;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='leave_ledger_entries') THEN
+    ALTER TABLE public.daily_crime_reports ADD COLUMN leave_ledger_entries JSONB DEFAULT '[]'::jsonb;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='seizures_summary') THEN
+    ALTER TABLE public.daily_crime_reports ADD COLUMN seizures_summary TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='major_incidents_notes') THEN
+    ALTER TABLE public.daily_crime_reports ADD COLUMN major_incidents_notes TEXT;
+  END IF;
+
+  -- User messages migrations
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='user_messages' AND column_name='read_by') THEN
+    ALTER TABLE public.user_messages ADD COLUMN read_by JSONB DEFAULT '[]'::jsonb;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='user_messages' AND column_name='recipient_user_ids') THEN
+    ALTER TABLE public.user_messages ADD COLUMN recipient_user_ids JSONB DEFAULT '[]'::jsonb;
+  END IF;
+END $$;
+
+-- 11. DISABLE ROW LEVEL SECURITY (RLS) FOR DIRECT APP SYNC ACCESS
 ALTER TABLE public.user_accounts DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fir_cases DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.investigating_officers DISABLE ROW LEVEL SECURITY;
@@ -299,4 +335,17 @@ ALTER TABLE public.land_disputes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ud_cases DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.monthly_arrest_adjustments DISABLE ROW LEVEL SECURITY;
-`; 
+
+-- 12. INSERT DEFAULT POLICE OFFICER ACCOUNTS IF EMPTY
+INSERT INTO public.user_accounts (id, user_id, password, role, permission_level, officer_name, rank, police_station, is_active)
+VALUES
+  ('user-sdpo', 'sdpo.tarapur', 'sdpo@1234', 'SDPO', 'ADMIN', 'Subdivisional Police Officer', 'SDPO Tarapur', 'Subdivision HQ', true),
+  ('user-ci', 'ci.tarapur', 'ci@1234', 'CI', 'EDITOR', 'Circle Inspector', 'Circle Inspector (CI)', 'Subdivision HQ', true),
+  ('user-tarapur', 'sho.tarapur', 'ps@tarapur', 'PS_TARAPUR', 'EDITOR', 'SHO Tarapur', 'Station House Officer (SHO)', 'Tarapur', true),
+  ('user-asarganj', 'sho.asarganj', 'ps@asarganj', 'PS_ASARGANJ', 'EDITOR', 'SHO Asarganj', 'Station House Officer (SHO)', 'Asarganj', true),
+  ('user-sangrampur', 'sho.sangrampur', 'ps@sangrampur', 'PS_SANGRAMPUR', 'EDITOR', 'SHO Sangrampur', 'Station House Officer (SHO)', 'Sangrampur', true),
+  ('user-harpur', 'sho.harpur', 'ps@harpur', 'PS_HARPUR', 'EDITOR', 'SHO Harpur', 'Station House Officer (SHO)', 'Harpur', true),
+  ('user-op-tarapur', 'operator.tarapur', 'op@tarapur', 'PS_TARAPUR', 'OPERATOR', 'Operator Tarapur PS', 'Computer Operator / Munshi', 'Tarapur', true),
+  ('user-op-asarganj', 'operator.asarganj', 'op@asarganj', 'PS_ASARGANJ', 'OPERATOR', 'Operator Asarganj PS', 'Computer Operator / Munshi', 'Asarganj', true)
+ON CONFLICT (id) DO NOTHING;
+`;
