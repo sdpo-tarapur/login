@@ -19,6 +19,8 @@ export type DeadlineCategory = 60 | 90;
 
 export type CCTNSSyncOption = 'ALL' | 'CS_SYNC' | 'CD_SYNC' | 'BOTH_SYNC' | 'NONE_SYNC';
 
+export type IOStatus = 'ACTIVE' | 'TRANSFERRED';
+
 export interface InvestigatingOfficer {
   id: string;
   name: string;
@@ -26,6 +28,9 @@ export interface InvestigatingOfficer {
   ps: PoliceStationName | 'Subdivision HQ';
   phone?: string;
   activeCasesCount?: number;
+  status?: IOStatus;
+  transferredTo?: string;
+  transferDate?: string;
 }
 
 export type PunishmentTerm = '7_years_or_more' | 'less_than_7_years';
