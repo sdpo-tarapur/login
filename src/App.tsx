@@ -40,6 +40,7 @@ import { SupervisionStatusSection } from './components/SupervisionStatusSection'
 import { AIChatbot } from './components/AIChatbot';
 import { LoginModal } from './components/LoginModal';
 import { UserManagementModal } from './components/UserManagementModal';
+import { SupabaseConfigModal } from './components/SupabaseConfigModal';
 import { isSupabaseConfigured } from './lib/supabase';
 import {
   fetchUserAccountsFromSupabase,
@@ -222,8 +223,55 @@ export default function App() {
   // Modals state
   const [isNewFIRModalOpen, setIsNewFIRModalOpen] = useState(false);
   const [isNewLandDisputeModalOpen, setIsNewLandDisputeModalOpen] = useState(false);
+  const [isSupabaseConfigOpen, setIsSupabaseConfigOpen] = useState(false);
   const [editingCase, setEditingCase] = useState<FIRCase | null>(null);
   const [viewingCase, setViewingCase] = useState<FIRCase | null>(null);
+
+  // Function to refresh all data from Supabase Cloud
+  const handleRefreshAllFromSupabase = async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const [
+        accounts,
+        firList,
+        landList,
+        udList,
+        ioList,
+        leaveList,
+        reports,
+        msgs,
+        overrides,
+      ] = await Promise.all([
+        fetchUserAccountsFromSupabase(),
+        fetchFIRCasesFromSupabase(),
+        fetchLandDisputesFromSupabase(),
+        fetchUDCasesFromSupabase(),
+        fetchIOsFromSupabase(),
+        fetchLeaveLedgerFromSupabase(),
+        fetchDailyReportsFromSupabase(),
+        fetchUserMessagesFromSupabase(),
+        fetchMonthlyArrestOverridesFromSupabase(),
+      ]);
+
+      if (accounts && accounts.length > 0) {
+        // Merge with initial accounts to ensure nobody is lost
+        const mergedMap = new Map<string, UserAccount>();
+        INITIAL_USER_ACCOUNTS.forEach((a) => mergedMap.set(a.userId.toLowerCase(), a));
+        accounts.forEach((a) => mergedMap.set(a.userId.toLowerCase(), a));
+        setUserAccounts(Array.from(mergedMap.values()));
+      }
+      if (firList && firList.length > 0) setCases(firList);
+      if (landList && landList.length > 0) setLandDisputes(landList);
+      if (udList && udList.length > 0) setUdCases(udList);
+      if (ioList && ioList.length > 0) setIos(ioList);
+      if (leaveList && leaveList.length > 0) setLeaveLedger(leaveList);
+      if (reports && reports.length > 0) setDailyReports(reports);
+      if (msgs && msgs.length > 0) setMessages(msgs);
+      if (overrides) setMonthlyArrestOverrides(overrides);
+    } catch (err) {
+      console.error('Error in handleRefreshAllFromSupabase:', err);
+    }
+  };
 
   // Save user accounts to LocalStorage
   useEffect(() => {
@@ -278,60 +326,7 @@ export default function App() {
   // Supabase Initial Sync on Mount
   useEffect(() => {
     if (isSupabaseConfigured()) {
-      // Fetch User Accounts
-      fetchUserAccountsFromSupabase().then((accounts) => {
-        if (accounts && accounts.length > 0) {
-          setUserAccounts(accounts);
-        }
-      });
-      // Fetch FIR cases
-      fetchFIRCasesFromSupabase().then((firList) => {
-        if (firList && firList.length > 0) {
-          setCases(firList);
-        }
-      });
-      // Fetch Land disputes
-      fetchLandDisputesFromSupabase().then((landList) => {
-        if (landList && landList.length > 0) {
-          setLandDisputes(landList);
-        }
-      });
-      // Fetch UD cases
-      fetchUDCasesFromSupabase().then((udList) => {
-        if (udList && udList.length > 0) {
-          setUdCases(udList);
-        }
-      });
-      // Fetch IOs
-      fetchIOsFromSupabase().then((ioList) => {
-        if (ioList && ioList.length > 0) {
-          setIos(ioList);
-        }
-      });
-      // Fetch Leave Ledger
-      fetchLeaveLedgerFromSupabase().then((leaveList) => {
-        if (leaveList && leaveList.length > 0) {
-          setLeaveLedger(leaveList);
-        }
-      });
-      // Fetch Daily Reports
-      fetchDailyReportsFromSupabase().then((reports) => {
-        if (reports && reports.length > 0) {
-          setDailyReports(reports);
-        }
-      });
-      // Fetch User Messages
-      fetchUserMessagesFromSupabase().then((msgs) => {
-        if (msgs && msgs.length > 0) {
-          setMessages(msgs);
-        }
-      });
-      // Fetch Monthly Arrest Overrides
-      fetchMonthlyArrestOverridesFromSupabase().then((overrides) => {
-        if (overrides) {
-          setMonthlyArrestOverrides(overrides);
-        }
-      });
+      handleRefreshAllFromSupabase();
     }
   }, []);
 
@@ -892,11 +887,30 @@ export default function App() {
 
   if (!currentUserAccount) {
     return (
-      <LoginModal
-        isOpen={true}
-        accounts={userAccounts}
-        onLoginSuccess={handleLoginSuccess}
-      />
+      <>
+        <LoginModal
+          isOpen={true}
+          accounts={userAccounts}
+          onLoginSuccess={handleLoginSuccess}
+          onResetAccounts={handleResetUserAccountsToDefaults}
+          onOpenSupabaseConfig={() => setIsSupabaseConfigOpen(true)}
+        />
+        <SupabaseConfigModal
+          isOpen={isSupabaseConfigOpen}
+          onClose={() => setIsSupabaseConfigOpen(false)}
+          onRefreshAllData={handleRefreshAllFromSupabase}
+          localData={{
+            userAccounts,
+            cases,
+            ios,
+            leaveLedger,
+            landDisputes,
+            udCases,
+            dailyReports,
+            messages,
+          }}
+        />
+      </>
     );
   }
 
@@ -919,6 +933,7 @@ export default function App() {
         onRoleChange={handleRoleChange}
         currentUserAccount={currentUserAccount}
         onOpenUserManagement={() => setIsUserManagementOpen(true)}
+        onOpenSupabaseConfig={() => setIsSupabaseConfigOpen(true)}
         onLogout={handleLogout}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -1150,10 +1165,20 @@ export default function App() {
         onResetToDefaults={handleResetUserAccountsToDefaults}
       />
 
-      <LoginModal
-        isOpen={!currentUserAccount}
-        accounts={userAccounts}
-        onLoginSuccess={handleLoginSuccess}
+      <SupabaseConfigModal
+        isOpen={isSupabaseConfigOpen}
+        onClose={() => setIsSupabaseConfigOpen(false)}
+        onRefreshAllData={handleRefreshAllFromSupabase}
+        localData={{
+          userAccounts,
+          cases,
+          ios,
+          leaveLedger,
+          landDisputes,
+          udCases,
+          dailyReports,
+          messages,
+        }}
       />
 
       {/* Footer */}
