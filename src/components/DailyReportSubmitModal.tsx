@@ -8,6 +8,8 @@ import {
   RankStrengthDetails,
   OfficerOnDutyDetails,
   GastiPatrolDetails,
+  ODShiftItem,
+  GastiShiftItem,
   LeaveLedgerEntry,
   OfficerLeaveRank,
 } from '../types';
@@ -64,15 +66,19 @@ export const DailyReportSubmitModal: React.FC<DailyReportSubmitModalProps> = ({
   // 1. Total FIR registered last day
   const [registeredFirs, setRegisteredFirs] = useState<RegisteredFIRItem[]>([]);
 
-  // 2. OD details of Today
-  const [od1, setOd1] = useState('');
-  const [od2, setOd2] = useState('');
-  const [od3, setOd3] = useState('');
+  // 2. OD (Officer on Duty) shifts of Today
+  const [odShifts, setOdShifts] = useState<ODShiftItem[]>([
+    { shiftName: 'OD 1 (Day Shift)', timeSlot: '06:00 - 14:00', ioName: '', remarks: '' },
+    { shiftName: 'OD 2 (Evening Shift)', timeSlot: '14:00 - 22:00', ioName: '', remarks: '' },
+    { shiftName: 'OD 3 (Night Shift)', timeSlot: '22:00 - 06:00', ioName: '', remarks: '' },
+  ]);
 
-  // 3. GASTI details of Today
-  const [morningGasti, setMorningGasti] = useState('');
-  const [dayGasti, setDayGasti] = useState('');
-  const [nightGasti, setNightGasti] = useState('');
+  // 3. GASTI (Patrol) shifts of Today
+  const [gastiShifts, setGastiShifts] = useState<GastiShiftItem[]>([
+    { shiftName: 'Morning Gasti', timeSlot: '06:00 - 14:00', ioName: '', sectorArea: 'Town & Market Sector', vehicleNumber: '', forceCount: 2, remarks: '' },
+    { shiftName: 'Day / Mobile Gasti', timeSlot: '14:00 - 22:00', ioName: '', sectorArea: 'Main Highway & Border Checkpoint', vehicleNumber: '', forceCount: 3, remarks: '' },
+    { shiftName: 'Night Gasti / Nakabandi', timeSlot: '22:00 - 06:00', ioName: '', sectorArea: 'Sensitive Naka Points & Rural Patrol', vehicleNumber: '', forceCount: 4, remarks: '' },
+  ]);
 
   // 4. Arresting details of last day
   const [caseArrests, setCaseArrests] = useState<CaseArrestItem[]>([]);
@@ -157,6 +163,63 @@ export const DailyReportSubmitModal: React.FC<DailyReportSubmitModalProps> = ({
     val: string | number | boolean
   ) => {
     setCaseArrests((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: val };
+      return next;
+    });
+  };
+
+  // Helper to add OD Shift row
+  const handleAddODShift = () => {
+    const shiftNum = odShifts.length + 1;
+    setOdShifts((prev) => [
+      ...prev,
+      {
+        id: `od-${Date.now()}`,
+        shiftName: `OD ${shiftNum} (Special Duty)`,
+        timeSlot: '08:00 - 20:00',
+        ioName: '',
+        remarks: '',
+      },
+    ]);
+  };
+
+  const handleRemoveODShift = (index: number) => {
+    setOdShifts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateODShift = (index: number, field: keyof ODShiftItem, val: string) => {
+    setOdShifts((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: val };
+      return next;
+    });
+  };
+
+  // Helper to add Gasti Patrol row
+  const handleAddGastiShift = () => {
+    const shiftNum = gastiShifts.length + 1;
+    setGastiShifts((prev) => [
+      ...prev,
+      {
+        id: `gasti-${Date.now()}`,
+        shiftName: `Patrol Shift ${shiftNum}`,
+        timeSlot: '20:00 - 04:00',
+        ioName: '',
+        sectorArea: 'Rural & Naka Zone',
+        vehicleNumber: '',
+        forceCount: 3,
+        remarks: '',
+      },
+    ]);
+  };
+
+  const handleRemoveGastiShift = (index: number) => {
+    setGastiShifts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateGastiShift = (index: number, field: keyof GastiShiftItem, val: any) => {
+    setGastiShifts((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: val };
       return next;
@@ -257,16 +320,26 @@ export const DailyReportSubmitModal: React.FC<DailyReportSubmitModalProps> = ({
 
     const firsCount = registeredFirs.length;
 
+    // Filter valid OD shifts
+    const validOdShifts = odShifts.filter((s) => s.ioName && s.ioName.trim().length > 0);
     const odDetails: OfficerOnDutyDetails = {
-      od1IoName: od1.trim() || undefined,
-      od2IoName: od2.trim() || undefined,
-      od3IoName: od3.trim() || undefined,
+      od1IoName: validOdShifts[0]?.ioName || undefined,
+      od2IoName: validOdShifts[1]?.ioName || undefined,
+      od3IoName: validOdShifts[2]?.ioName || undefined,
+      odShifts: validOdShifts,
     };
 
+    // Filter valid Gasti shifts
+    const validGastiShifts = gastiShifts.filter((s) => s.ioName && s.ioName.trim().length > 0);
+    const morningShift = validGastiShifts.find((s) => s.shiftName.toLowerCase().includes('morning')) || validGastiShifts[0];
+    const dayShift = validGastiShifts.find((s) => s.shiftName.toLowerCase().includes('day') || s.shiftName.toLowerCase().includes('mobile')) || validGastiShifts[1];
+    const nightShift = validGastiShifts.find((s) => s.shiftName.toLowerCase().includes('night') || s.shiftName.toLowerCase().includes('naka')) || validGastiShifts[2];
+
     const gastiDetails: GastiPatrolDetails = {
-      morningGastiIoName: morningGasti.trim() || undefined,
-      dayGastiIoName: dayGasti.trim() || undefined,
-      nightGastiIoName: nightGasti.trim() || undefined,
+      morningGastiIoName: morningShift?.ioName || undefined,
+      dayGastiIoName: dayShift?.ioName || undefined,
+      nightGastiIoName: nightShift?.ioName || undefined,
+      gastiShifts: validGastiShifts,
     };
 
     const arrestDetails = {
@@ -489,140 +562,195 @@ export const DailyReportSubmitModal: React.FC<DailyReportSubmitModalProps> = ({
           </div>
 
           {/* Section 2 & 3: OD Details & GASTI Patrol Details (Side-by-side) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* OD Details of Today (OD1, OD2, OD3) */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
-                <span className="p-1 bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded">
-                  <Clock className="w-4 h-4" />
-                </span>
-                <span className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-xs">
-                  OD Details of Today (3 ODs)
-                </span>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* OD Details of Today */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded">
+                    <Clock className="w-4 h-4" />
+                  </span>
+                  <span className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-xs">
+                    OD Details of Today ({odShifts.length} Shifts)
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddODShift}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md font-bold text-[11px] transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add OD Shift</span>
+                </button>
               </div>
 
               <div className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    OD 1 (Officer on Duty 1) *
-                  </label>
-                  <select
-                    value={od1}
-                    onChange={(e) => setOd1(e.target.value)}
-                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
+                {odShifts.map((shift, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200/80 dark:border-slate-700/80 space-y-2"
                   >
-                    <option value="">Select OD1 from {ps} PS Officers...</option>
-                    {psOfficers.map((io) => (
-                      <option key={io.id} value={io.name}>
-                        {io.name} ({io.rank})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <input
+                        type="text"
+                        value={shift.shiftName}
+                        onChange={(e) => handleUpdateODShift(idx, 'shiftName', e.target.value)}
+                        placeholder="Shift Name"
+                        className="font-bold text-xs text-amber-900 dark:text-amber-300 bg-transparent border-b border-amber-300 dark:border-amber-700 px-1 py-0.5 outline-none flex-1"
+                      />
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    OD 2 (Officer on Duty 2)
-                  </label>
-                  <select
-                    value={od2}
-                    onChange={(e) => setOd2(e.target.value)}
-                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
-                  >
-                    <option value="">Select OD2 from {ps} PS Officers...</option>
-                    {psOfficers.map((io) => (
-                      <option key={io.id} value={io.name}>
-                        {io.name} ({io.rank})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={shift.timeSlot}
+                          onChange={(e) => handleUpdateODShift(idx, 'timeSlot', e.target.value)}
+                          placeholder="Time (e.g. 06:00 - 14:00)"
+                          className="font-mono text-[11px] bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-0.5 text-slate-900 dark:text-white font-bold w-32"
+                        />
+                        {odShifts.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveODShift(idx)}
+                            className="p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950 rounded transition cursor-pointer"
+                            title="Remove Shift"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    OD 3 (Officer on Duty 3)
-                  </label>
-                  <select
-                    value={od3}
-                    onChange={(e) => setOd3(e.target.value)}
-                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
-                  >
-                    <option value="">Select OD3 from {ps} PS Officers...</option>
-                    {psOfficers.map((io) => (
-                      <option key={io.id} value={io.name}>
-                        {io.name} ({io.rank})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
+                        Officer on Duty (Selected from {ps} PS IOs)
+                      </label>
+                      <select
+                        value={shift.ioName}
+                        onChange={(e) => handleUpdateODShift(idx, 'ioName', e.target.value)}
+                        className="w-full p-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold text-xs"
+                      >
+                        <option value="">Select Officer for {shift.shiftName}...</option>
+                        {psOfficers.map((io) => (
+                          <option key={io.id} value={io.name}>
+                            {io.name} ({io.rank}) {io.phone ? `— ${io.phone}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <input
+                        type="text"
+                        value={shift.remarks || ''}
+                        onChange={(e) => handleUpdateODShift(idx, 'remarks', e.target.value)}
+                        placeholder="Optional remarks (e.g. PS Desk Duty, Wireless Incharge)"
+                        className="w-full p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[11px] text-slate-700 dark:text-slate-300"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* GASTI Details of Today (Morning, Day, Night) */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
-                <span className="p-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded">
-                  <Car className="w-4 h-4" />
-                </span>
-                <span className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-xs">
-                  GASTI (Patrol) Details of Today (3 Shifts)
-                </span>
+            {/* GASTI Details of Today (Morning, Day, Night, Rural, Naka) */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded">
+                    <Car className="w-4 h-4" />
+                  </span>
+                  <span className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-xs">
+                    GASTI (Patrol) Shifts ({gastiShifts.length} Shifts)
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddGastiShift}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[11px] transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Patrol Shift</span>
+                </button>
               </div>
 
               <div className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    Morning Gasti Officer *
-                  </label>
-                  <select
-                    value={morningGasti}
-                    onChange={(e) => setMorningGasti(e.target.value)}
-                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
+                {gastiShifts.map((shift, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200/80 dark:border-slate-700/80 space-y-2"
                   >
-                    <option value="">Select Morning Gasti Officer...</option>
-                    {psOfficers.map((io) => (
-                      <option key={io.id} value={io.name}>
-                        {io.name} ({io.rank})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <input
+                        type="text"
+                        value={shift.shiftName}
+                        onChange={(e) => handleUpdateGastiShift(idx, 'shiftName', e.target.value)}
+                        placeholder="Shift Name (e.g. Night Gasti)"
+                        className="font-bold text-xs text-emerald-900 dark:text-emerald-300 bg-transparent border-b border-emerald-300 dark:border-emerald-700 px-1 py-0.5 outline-none flex-1"
+                      />
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    Day Gasti Officer
-                  </label>
-                  <select
-                    value={dayGasti}
-                    onChange={(e) => setDayGasti(e.target.value)}
-                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
-                  >
-                    <option value="">Select Day Gasti Officer...</option>
-                    {psOfficers.map((io) => (
-                      <option key={io.id} value={io.name}>
-                        {io.name} ({io.rank})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={shift.timeSlot}
+                          onChange={(e) => handleUpdateGastiShift(idx, 'timeSlot', e.target.value)}
+                          placeholder="Time (e.g. 22:00 - 06:00)"
+                          className="font-mono text-[11px] bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-0.5 text-slate-900 dark:text-white font-bold w-32"
+                        />
+                        {gastiShifts.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveGastiShift(idx)}
+                            className="p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950 rounded transition cursor-pointer"
+                            title="Remove Shift"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    Night Gasti Officer
-                  </label>
-                  <select
-                    value={nightGasti}
-                    onChange={(e) => setNightGasti(e.target.value)}
-                    className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
-                  >
-                    <option value="">Select Night Gasti Officer...</option>
-                    {psOfficers.map((io) => (
-                      <option key={io.id} value={io.name}>
-                        {io.name} ({io.rank})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
+                        Gasti Officer (from {ps} PS IOs)
+                      </label>
+                      <select
+                        value={shift.ioName}
+                        onChange={(e) => handleUpdateGastiShift(idx, 'ioName', e.target.value)}
+                        className="w-full p-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-white font-bold text-xs"
+                      >
+                        <option value="">Select Officer for {shift.shiftName}...</option>
+                        {psOfficers.map((io) => (
+                          <option key={io.id} value={io.name}>
+                            {io.name} ({io.rank}) {io.phone ? `— ${io.phone}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <input
+                          type="text"
+                          value={shift.sectorArea || ''}
+                          onChange={(e) => handleUpdateGastiShift(idx, 'sectorArea', e.target.value)}
+                          placeholder="Patrol Sector / Area"
+                          className="w-full p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[11px] text-slate-700 dark:text-slate-300 font-medium"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          value={shift.vehicleNumber || ''}
+                          onChange={(e) => handleUpdateGastiShift(idx, 'vehicleNumber', e.target.value)}
+                          placeholder="Vehicle No. (e.g. BR-08-G-1234)"
+                          className="w-full p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[11px] font-mono text-slate-700 dark:text-slate-300"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
