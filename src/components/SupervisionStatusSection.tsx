@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { FIRCase, PoliceStationName, CaseStatus, UserRole } from '../types';
-import { formatReadableDate, getDeadlineInfo } from '../utils/helpers';
+import { formatReadableDate, getDeadlineInfo, matchesCaseFullDatabaseSearch } from '../utils/helpers';
 import { exportToExcel, exportToPDF } from '../utils/reportExport';
 import {
   ShieldCheck,
@@ -107,7 +107,10 @@ export const SupervisionStatusSection: React.FC<SupervisionStatusSectionProps> =
 
   // Filter Logic
   const filteredCases = useMemo(() => {
-    return srCases.filter((c) => {
+    // When searching, search from everything in database (all cases)
+    const baseCases = searchQuery.trim() ? cases : srCases;
+
+    return baseCases.filter((c) => {
       // PS Filter
       if (psFilter !== 'ALL' && c.ps !== psFilter) return false;
 
@@ -166,22 +169,15 @@ export const SupervisionStatusSection: React.FC<SupervisionStatusSectionProps> =
       if (caseReviewFilter === 'REVIEWED' && !hasReview) return false;
       if (caseReviewFilter === 'PENDING' && hasReview) return false;
 
-      // Search Query
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchesNumber = c.firNumber.toLowerCase().includes(query);
-        const matchesSections = c.sections.toLowerCase().includes(query);
-        const matchesComplainant = c.complainantName.toLowerCase().includes(query);
-        const matchesIO = c.ioName.toLowerCase().includes(query);
-        const matchesPO = c.placeOfOccurrence.toLowerCase().includes(query);
-        if (!matchesNumber && !matchesSections && !matchesComplainant && !matchesIO && !matchesPO) {
-          return false;
-        }
+      // Search Query: Search from everything in database
+      if (searchQuery.trim() && !matchesCaseFullDatabaseSearch(c, searchQuery)) {
+        return false;
       }
 
       return true;
     });
   }, [
+    cases,
     srCases,
     psFilter,
     deadlineLimitFilter,
@@ -494,7 +490,7 @@ export const SupervisionStatusSection: React.FC<SupervisionStatusSectionProps> =
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search FIR #, Section, Complainant, IO..."
+              placeholder="Search everything in database (FIR #, Directives, IO, Sections, Notes, Dates...)"
               className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-purple-500"
             />
           </div>
