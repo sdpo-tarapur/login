@@ -1,5 +1,74 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// --- SEED ALL LOCAL DATA TO SUPABASE ---
+export async function seedAllDataToSupabase(data: {
+  userAccounts: any[];
+  cases: any[];
+  ios: any[];
+  leaveLedger: any[];
+  landDisputes: any[];
+  udCases: any[];
+  dailyReports: any[];
+  messages: any[];
+}): Promise<{ success: boolean; message: string; countSummary: Record<string, number> }> {
+  if (!isSupabaseConfigured() || !getSupabase()) {
+    return {
+      success: false,
+      message: 'Supabase is not configured. Please set your Supabase URL & Anon Key first.',
+      countSummary: {},
+    };
+  }
+
+  const counts: Record<string, number> = {
+    userAccounts: 0,
+    cases: 0,
+    ios: 0,
+    leaveLedger: 0,
+    landDisputes: 0,
+    udCases: 0,
+    dailyReports: 0,
+    messages: 0,
+  };
+
+  try {
+    for (const acc of data.userAccounts || []) {
+      if (await saveUserAccountToSupabase(acc)) counts.userAccounts++;
+    }
+    for (const c of data.cases || []) {
+      if (await saveFIRCaseToSupabase(c)) counts.cases++;
+    }
+    for (const io of data.ios || []) {
+      if (await saveIOToSupabase(io)) counts.ios++;
+    }
+    for (const l of data.leaveLedger || []) {
+      if (await saveLeaveLedgerEntryToSupabase(l)) counts.leaveLedger++;
+    }
+    for (const ld of data.landDisputes || []) {
+      if (await saveLandDisputeToSupabase(ld)) counts.landDisputes++;
+    }
+    for (const ud of data.udCases || []) {
+      if (await saveUDCaseToSupabase(ud)) counts.udCases++;
+    }
+    for (const rep of data.dailyReports || []) {
+      if (await saveDailyReportToSupabase(rep)) counts.dailyReports++;
+    }
+    for (const msg of data.messages || []) {
+      if (await saveUserMessageToSupabase(msg)) counts.messages++;
+    }
+
+    return {
+      success: true,
+      message: `Successfully synchronized all records with Supabase Cloud Database!`,
+      countSummary: counts,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Sync partially failed: ${err?.message || err}`,
+      countSummary: counts,
+    };
+  }
+}
 // --- DIAGNOSTICS & TABLE VERIFICATION ---
 export async function testAllSupabaseTables(): Promise<{
   connected: boolean;
