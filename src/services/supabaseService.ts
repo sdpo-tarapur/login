@@ -1,148 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-// --- USER ACCOUNTS ---
-export async function fetchUserAccountsFromSupabase(): Promise<any[] | null> {
-  const client = getSupabase();
-  if (!isSupabaseConfigured() || !client) return null;
-  try {
-    const { data, error } = await client.from('user_accounts').select('*');
-    if (error) {
-      console.warn('Error fetching user accounts from Supabase:', error.message);
-      return null;
-    }
-    return data || [];
-  } catch (err) {
-    console.warn('Supabase exception in fetchUserAccounts:', err);
-    return null;
-  }
-}
 
-// --- SEED ALL LOCAL DATA TO SUPABASE ---
-export async function seedAllDataToSupabase(data: {
-  userAccounts: any[];
-  cases: any[];
-  ios: any[];
-  leaveLedger: any[];
-  landDisputes: any[];
-  udCases: any[];
-  dailyReports: any[];
-  messages: any[];
-}): Promise<{ success: boolean; message: string; countSummary: Record<string, number> }> {
-  if (!isSupabaseConfigured() || !getSupabase()) {
-    return {
-      success: false,
-      message: 'Supabase is not configured. Please set your Supabase URL & Anon Key first.',
-      countSummary: {},
-    };
-  }
+// ==========================================
+// 1. CREDENTIALS & CLIENT CONFIGURATION
+// ==========================================
 
-  const counts: Record<string, number> = {
-    userAccounts: 0,
-    cases: 0,
-    ios: 0,
-    leaveLedger: 0,
-    landDisputes: 0,
-    udCases: 0,
-    dailyReports: 0,
-    messages: 0,
-  };
-
-  try {
-    for (const acc of data.userAccounts || []) {
-      if (await saveUserAccountToSupabase(acc)) counts.userAccounts++;
-    }
-    for (const c of data.cases || []) {
-      if (await saveFIRCaseToSupabase(c)) counts.cases++;
-    }
-    for (const io of data.ios || []) {
-      if (await saveIOToSupabase(io)) counts.ios++;
-    }
-    for (const l of data.leaveLedger || []) {
-      if (await saveLeaveLedgerEntryToSupabase(l)) counts.leaveLedger++;
-    }
-    for (const ld of data.landDisputes || []) {
-      if (await saveLandDisputeToSupabase(ld)) counts.landDisputes++;
-    }
-    for (const ud of data.udCases || []) {
-      if (await saveUDCaseToSupabase(ud)) counts.udCases++;
-    }
-    for (const rep of data.dailyReports || []) {
-      if (await saveDailyReportToSupabase(rep)) counts.dailyReports++;
-    }
-    for (const msg of data.messages || []) {
-      if (await saveUserMessageToSupabase(msg)) counts.messages++;
-    }
-
-    return {
-      success: true,
-      message: `Successfully synchronized all records with Supabase Cloud Database!`,
-      countSummary: counts,
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      message: `Sync partially failed: ${err?.message || err}`,
-      countSummary: counts,
-    };
-  }
-}
-// --- DIAGNOSTICS & TABLE VERIFICATION ---
-export async function testAllSupabaseTables(): Promise<{
-  connected: boolean;
-  message: string;
-  tables: Record<string, { status: 'ok' | 'missing' | 'error'; count?: number; error?: string }>;
-}> {
-  const client = getSupabase();
-  if (!isSupabaseConfigured() || !client) {
-    return {
-      connected: false,
-      message: 'Supabase is not configured. Please provide Project URL & Public Anon Key.',
-      tables: {},
-    };
-  }
-
-  const tableNames = [
-    'user_accounts',
-    'fir_cases',
-    'investigating_officers',
-    'leave_ledger',
-    'daily_crime_reports',
-    'land_disputes',
-    'ud_cases',
-    'user_messages',
-    'monthly_arrest_adjustments',
-  ];
-
-  const results: Record<string, { status: 'ok' | 'missing' | 'error'; count?: number; error?: string }> = {};
-  let anySuccess = false;
-
-  for (const t of tableNames) {
-    try {
-      const { error, count } = await client.from(t).select('*', { count: 'exact', head: true });
-      if (!error) {
-        results[t] = { status: 'ok', count: count || 0 };
-        anySuccess = true;
-      } else {
-        if (error.code === '42P01' || error.message?.includes('does not exist')) {
-          results[t] = { status: 'missing', error: 'Table does not exist. Run SQL script.' };
-        } else {
-          results[t] = { status: 'error', error: error.message };
-        }
-      }
-    } catch (e: any) {
-      results[t] = { status: 'error', error: e?.message || 'Network exception' };
-    }
-  }
-
-  return {
-    connected: anySuccess,
-    message: anySuccess
-      ? 'Successfully connected to Supabase database.'
-      : 'Could not query Supabase tables. Ensure SQL tables are created in Supabase SQL editor.',
-    tables: results,
-  };
-}
-
-// Retrieve Supabase URL & Anon Key from localStorage first, then fallback to import.meta.env
 export function getSupabaseCredentials(): { url: string; anonKey: string; isConfigured: boolean } {
   let url = '';
   let anonKey = '';
@@ -214,7 +75,6 @@ export const supabase = new Proxy({} as SupabaseClient, {
   get(_target, prop) {
     const client = getSupabase();
     if (!client) {
-      // Return a safe dummy handler if client is not configured
       if (prop === 'from') {
         return () => ({
           select: () => Promise.resolve({ data: null, error: { message: 'Supabase not configured' } }),
@@ -245,7 +105,7 @@ export function saveSupabaseConfig(url: string, anonKey: string): { success: boo
 
     localStorage.setItem('sdpo_supabase_url', cleanUrl);
     localStorage.setItem('sdpo_supabase_anon_key', cleanKey);
-    cachedClient = null; // force reload client
+    cachedClient = null; 
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Failed to save configuration' };
@@ -262,232 +122,412 @@ export function clearSupabaseConfig(): void {
   }
 }
 
-// SQL Schema for the user to run in Supabase SQL Editor
-export const SUPABASE_SQL_SETUP_SCRIPT = `-- ====================================================================
--- TARAPUR POLICE SUBDIVISION PORTAL - SUPABASE POSTGRESQL DATABASE SCHEMA
--- Execute this script in your Supabase Project -> SQL Editor
--- ====================================================================
+// ==========================================
+// 2. DIAGNOSTICS & TABLE VERIFICATION
+// ==========================================
 
--- 1. USER ACCOUNTS TABLE
-CREATE TABLE IF NOT EXISTS public.user_accounts (
-  id TEXT PRIMARY KEY,
-  user_id TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
-  role TEXT NOT NULL,
-  permission_level TEXT DEFAULT 'EDITOR',
-  officer_name TEXT NOT NULL,
-  rank TEXT NOT NULL,
-  police_station TEXT NOT NULL,
-  contact_number TEXT,
-  is_active BOOLEAN DEFAULT true,
-  last_login TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+export async function testAllSupabaseTables(): Promise<{
+  connected: boolean;
+  message: string;
+  tables: Record<string, { status: 'ok' | 'missing' | 'error'; count?: number; error?: string }>;
+}> {
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) {
+    return {
+      connected: false,
+      message: 'Supabase is not configured. Please provide Project URL & Public Anon Key.',
+      tables: {},
+    };
+  }
 
--- 2. FIR CASES TABLE
-CREATE TABLE IF NOT EXISTS public.fir_cases (
-  id TEXT PRIMARY KEY,
-  fir_number TEXT NOT NULL,
-  ps TEXT NOT NULL,
-  fir_date TEXT NOT NULL,
-  sections TEXT NOT NULL,
-  punishment_term TEXT,
-  complainant_name TEXT NOT NULL,
-  complainant_phone TEXT,
-  place_of_occurrence TEXT NOT NULL,
-  io_name TEXT NOT NULL,
-  designation TEXT DEFAULT 'PENDING_DESIGNATION',
-  designation_date TEXT,
-  deadline_days INTEGER DEFAULT 60,
-  status TEXT DEFAULT 'Under Investigation',
-  chargesheet_number TEXT,
-  chargesheet_date TEXT,
-  chargesheet_uploaded_cctns BOOLEAN DEFAULT false,
-  chargesheet_cctns_date TEXT,
-  case_diary_uploaded_cctns BOOLEAN DEFAULT false,
-  last_case_diary_no TEXT,
-  last_case_diary_date TEXT,
-  po_visit_date TEXT,
-  supervision_date TEXT,
-  pr_dates JSONB DEFAULT '[]'::jsonb,
-  final_pr_date TEXT,
-  case_review_dates JSONB DEFAULT '[]'::jsonb,
-  sdpo_supervision_note TEXT,
-  ci_supervision_note TEXT,
-  ps_progress_remarks TEXT,
-  created_at TEXT,
-  updated_at TEXT
-);
+  const tableNames = [
+    'user_accounts',
+    'fir_cases',
+    'investigating_officers',
+    'leave_ledger',
+    'daily_crime_reports',
+    'land_disputes',
+    'ud_cases',
+    'user_messages',
+    'monthly_arrest_adjustments',
+  ];
 
--- 3. INVESTIGATING OFFICERS TABLE
-CREATE TABLE IF NOT EXISTS public.investigating_officers (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  rank TEXT NOT NULL,
-  ps TEXT NOT NULL,
-  phone TEXT,
-  status TEXT DEFAULT 'ACTIVE',
-  transferred_to TEXT,
-  transfer_date TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+  const results: Record<string, { status: 'ok' | 'missing' | 'error'; count?: number; error?: string }> = {};
+  let anySuccess = false;
 
--- 4. LEAVE LEDGER TABLE
-CREATE TABLE IF NOT EXISTS public.leave_ledger (
-  id TEXT PRIMARY KEY,
-  report_id TEXT,
-  ps TEXT NOT NULL,
-  officer_name TEXT NOT NULL,
-  rank TEXT NOT NULL,
-  departure_date TEXT NOT NULL,
-  days_on_leave INTEGER DEFAULT 1,
-  arrival_date TEXT NOT NULL,
-  actual_arrival_date TEXT,
-  status TEXT DEFAULT 'ON_LEAVE',
-  leave_type TEXT DEFAULT 'CL',
-  remarks TEXT,
-  recorded_by TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+  for (const t of tableNames) {
+    try {
+      const { error, count } = await client.from(t).select('*', { count: 'exact', head: true });
+      if (!error) {
+        results[t] = { status: 'ok', count: count || 0 };
+        anySuccess = true;
+      } else {
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          results[t] = { status: 'missing', error: 'Table does not exist. Run SQL script.' };
+        } else {
+          results[t] = { status: 'error', error: error.message };
+        }
+      }
+    } catch (e: any) {
+      results[t] = { status: 'error', error: e?.message || 'Network exception' };
+    }
+  }
 
--- 5. DAILY CRIME REPORTS TABLE
-CREATE TABLE IF NOT EXISTS public.daily_crime_reports (
-  id TEXT PRIMARY KEY,
-  ps TEXT NOT NULL,
-  date TEXT NOT NULL,
-  firs_registered_count INTEGER DEFAULT 0,
-  registered_firs JSONB DEFAULT '[]'::jsonb,
-  od_details JSONB DEFAULT '{}'::jsonb,
-  gasti_details JSONB DEFAULT '{}'::jsonb,
-  arrests_count INTEGER DEFAULT 0,
-  arrest_details JSONB DEFAULT '{}'::jsonb,
-  rank_strengths JSONB DEFAULT '[]'::jsonb,
-  leave_ledger_entries JSONB DEFAULT '[]'::jsonb,
-  seizures_summary TEXT,
-  major_incidents_notes TEXT,
-  submitted_by TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+  return {
+    connected: anySuccess,
+    message: anySuccess
+      ? 'Successfully connected to Supabase database.'
+      : 'Could not query Supabase tables. Ensure SQL tables are created in Supabase SQL editor.',
+    tables: results,
+  };
+}
 
--- 6. LAND DISPUTES TABLE
-CREATE TABLE IF NOT EXISTS public.land_disputes (
-  id TEXT PRIMARY KEY,
-  ps TEXT NOT NULL,
-  date TEXT NOT NULL,
-  victim_name TEXT NOT NULL,
-  victim_address TEXT NOT NULL,
-  opposite_party_name TEXT,
-  plot_details TEXT NOT NULL,
-  dispute_nature TEXT NOT NULL,
-  status TEXT DEFAULT 'Pending',
-  disposal_date TEXT,
-  disposal_remarks TEXT,
-  janata_darbar_action TEXT,
-  remarks TEXT,
-  created_at TEXT
-);
+// ==========================================
+// 3. SEED ALL DATA TO SUPABASE
+// ==========================================
 
--- 7. UNNATURAL DEATH (UD) CASES TABLE
-CREATE TABLE IF NOT EXISTS public.ud_cases (
-  id TEXT PRIMARY KEY,
-  ud_case_no TEXT NOT NULL,
-  ps TEXT NOT NULL,
-  date TEXT NOT NULL,
-  deceased_name TEXT NOT NULL,
-  deceased_age_gender TEXT,
-  place_of_occurrence TEXT NOT NULL,
-  cause_of_death TEXT NOT NULL,
-  post_mortem_report_status TEXT DEFAULT 'Pending',
-  visceral_report_status TEXT DEFAULT 'Not Required',
-  status TEXT DEFAULT 'Under Investigation',
-  ci_supervision_remarks TEXT,
-  sdpo_remarks TEXT
-);
+export async function seedAllDataToSupabase(data: {
+  userAccounts?: any[];
+  cases?: any[];
+  ios?: any[];
+  leaveLedger?: any[];
+  landDisputes?: any[];
+  udCases?: any[];
+  dailyReports?: any[];
+  messages?: any[];
+}): Promise<{ success: boolean; message: string; countSummary: Record<string, number> }> {
+  if (!isSupabaseConfigured() || !getSupabase()) {
+    return {
+      success: false,
+      message: 'Supabase is not configured. Please set your Supabase URL & Anon Key first.',
+      countSummary: {},
+    };
+  }
 
--- 8. USER MESSAGES & DIRECTIVES TABLE
-CREATE TABLE IF NOT EXISTS public.user_messages (
-  id TEXT PRIMARY KEY,
-  sender_user_id TEXT NOT NULL,
-  sender_name TEXT NOT NULL,
-  sender_role TEXT NOT NULL,
-  recipient_user_id TEXT NOT NULL,
-  recipient_name TEXT NOT NULL,
-  subject TEXT NOT NULL,
-  message_text TEXT NOT NULL,
-  priority TEXT DEFAULT 'Routine',
-  read_by JSONB DEFAULT '[]'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+  const counts: Record<string, number> = {
+    userAccounts: 0,
+    cases: 0,
+    ios: 0,
+    leaveLedger: 0,
+    landDisputes: 0,
+    udCases: 0,
+    dailyReports: 0,
+    messages: 0,
+  };
 
--- 9. MONTHLY ARREST ADJUSTMENTS TABLE
-CREATE TABLE IF NOT EXISTS public.monthly_arrest_adjustments (
-  month_key TEXT NOT NULL,
-  ps TEXT NOT NULL DEFAULT 'ALL',
-  adjusted_figure INTEGER DEFAULT 0,
-  updated_by TEXT,
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  PRIMARY KEY (month_key, ps)
-);
+  try {
+    for (const acc of data.userAccounts || []) {
+      if (await saveUserAccountToSupabase(acc)) counts.userAccounts++;
+    }
+    for (const c of data.cases || []) {
+      if (await saveFIRCaseToSupabase(c)) counts.cases++;
+    }
+    for (const io of data.ios || []) {
+      if (await saveIOToSupabase(io)) counts.ios++;
+    }
+    for (const l of data.leaveLedger || []) {
+      if (await saveLeaveLedgerEntryToSupabase(l)) counts.leaveLedger++;
+    }
+    for (const ld of data.landDisputes || []) {
+      if (await saveLandDisputeToSupabase(ld)) counts.landDisputes++;
+    }
+    for (const ud of data.udCases || []) {
+      if (await saveUDCaseToSupabase(ud)) counts.udCases++;
+    }
+    for (const rep of data.dailyReports || []) {
+      if (await saveDailyReportToSupabase(rep)) counts.dailyReports++;
+    }
+    for (const msg of data.messages || []) {
+      if (await saveUserMessageToSupabase(msg)) counts.messages++;
+    }
 
--- 10. IDEMPOTENT COLUMN MIGRATION CHECKS (Safe to run multiple times)
-DO $$
-BEGIN
-  -- Daily Crime Reports missing column migrations
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='arrest_details') THEN
-    ALTER TABLE public.daily_crime_reports ADD COLUMN arrest_details JSONB DEFAULT '{}'::jsonb;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='od_details') THEN
-    ALTER TABLE public.daily_crime_reports ADD COLUMN od_details JSONB DEFAULT '{}'::jsonb;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='gasti_details') THEN
-    ALTER TABLE public.daily_crime_reports ADD COLUMN gasti_details JSONB DEFAULT '{}'::jsonb;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='registered_firs') THEN
-    ALTER TABLE public.daily_crime_reports ADD COLUMN registered_firs JSONB DEFAULT '[]'::jsonb;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='rank_strengths') THEN
-    ALTER TABLE public.daily_crime_reports ADD COLUMN rank_strengths JSONB DEFAULT '[]'::jsonb;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='leave_ledger_entries') THEN
-    ALTER TABLE public.daily_crime_reports ADD COLUMN leave_ledger_entries JSONB DEFAULT '[]'::jsonb;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='seizures_summary') THEN
-    ALTER TABLE public.daily_crime_reports ADD COLUMN seizures_summary TEXT;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='daily_crime_reports' AND column_name='major_incidents_notes') THEN
-    ALTER TABLE public.daily_crime_reports ADD COLUMN major_incidents_notes TEXT;
-  END IF;
+    return {
+      success: true,
+      message: 'Successfully synchronized all records with Supabase Cloud Database!',
+      countSummary: counts,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Sync partially failed: ${err?.message || err}`,
+      countSummary: counts,
+    };
+  }
+}
 
-  -- User messages migrations
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='user_messages' AND column_name='read_by') THEN
-    ALTER TABLE public.user_messages ADD COLUMN read_by JSONB DEFAULT '[]'::jsonb;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='user_messages' AND column_name='recipient_user_ids') THEN
-    ALTER TABLE public.user_messages ADD COLUMN recipient_user_ids JSONB DEFAULT '[]'::jsonb;
-  END IF;
-END $$;
+// ==========================================
+// 4. USER ACCOUNTS & AUTHENTICATION
+// ==========================================
 
--- 11. DISABLE ROW LEVEL SECURITY (RLS) FOR DIRECT APP SYNC ACCESS
-ALTER TABLE public.user_accounts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.fir_cases DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.investigating_officers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.leave_ledger DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.daily_crime_reports DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.land_disputes DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.ud_cases DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_messages DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.monthly_arrest_adjustments DISABLE ROW LEVEL SECURITY;
+export async function fetchUserAccountsFromSupabase(): Promise<any[] | null> {
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
+  try {
+    const { data, error } = await client.from('user_accounts').select('*');
+    if (error) {
+      console.warn('Error fetching user accounts from Supabase:', error.message);
+      return null;
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('Supabase exception in fetchUserAccounts:', err);
+    return null;
+  }
+}
 
--- 12. INSERT DEFAULT POLICE OFFICER ACCOUNTS IF EMPTY
-INSERT INTO public.user_accounts (id, user_id, password, role, permission_level, officer_name, rank, police_station, is_active)
-VALUES
-  ('user-sdpo', 'sdpo.tarapur', 'sdpo@1234', 'SDPO', 'ADMIN', 'Subdivisional Police Officer', 'SDPO Tarapur', 'Subdivision HQ', true),
-  ('user-ci', 'ci.tarapur', 'ci@1234', 'CI', 'EDITOR', 'Circle Inspector', 'Circle Inspector (CI)', 'Subdivision HQ', true),
-  ('user-tarapur', 'sho.tarapur', 'ps@tarapur', 'PS_TARAPUR', 'EDITOR', 'SHO Tarapur', 'Station House Officer (SHO)', 'Tarapur', true),
-  ('user-asarganj', 'sho.asarganj', 'ps@asarganj', 'PS_ASARGANJ', 'EDITOR', 'SHO Asarganj', 'Station House Officer (SHO)', 'Asarganj', true),
-  ('user-sangrampur', 'sho.sangrampur', 'ps@sangrampur', 'PS_SANGRAMPUR', 'EDITOR', 'SHO Sangrampur', 'Station House Officer (SHO)', 'Sangrampur', true),
-  ('user-harpur', 'sho.harpur', 'ps@harpur', 'PS_HARPUR', 'EDITOR', 'SHO Harpur', 'Station House Officer (SHO)', 'Harpur', true),
-  ('user-op-tarapur', 'operator.tarapur', 'op@tarapur', 'PS_TARAPUR', 'OPERATOR', 'Operator Tarapur PS', 'Computer Operator / Munshi', 'Tarapur', true),
-  ('user-op-asarganj', 'operator.asarganj', 'op@asarganj', 'PS_ASARGANJ', 'OPERATOR', 'Operator Asarganj PS', 'Computer Operator / Munshi', 'Asarganj', true)
-ON CONFLICT (id) DO NOTHING;
-`;
+export async function saveUserAccountToSupabase(account: any): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('user_accounts').upsert([account]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteUserAccountFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('user_accounts').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function authenticateOfficerWithSupabase(
+  userId: string,
+  plainPassword: string
+): Promise<{ success: boolean; account?: any; error?: string }> {
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) {
+    return { success: false, error: 'Supabase not connected' };
+  }
+
+  try {
+    const { data, error } = await client
+      .from('user_accounts')
+      .select('*')
+      .eq('user_id', userId.trim())
+      .eq('password', plainPassword.trim())
+      .limit(1);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    if (data && data.length > 0) {
+      return { success: true, account: data[0] };
+    }
+
+    return { success: false, error: 'Invalid credentials in Supabase database.' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Authentication error' };
+  }
+}
+
+// ==========================================
+// 5. FIR CASES
+// ==========================================
+
+export async function fetchFIRCasesFromSupabase(): Promise<any[] | null> {
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
+  try {
+    const { data, error } = await client.from('fir_cases').select('*');
+    if (error) {
+      console.warn('Error fetching FIR cases from Supabase:', error.message);
+      return null;
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('Supabase exception in fetchFIRCases:', err);
+    return null;
+  }
+}
+
+export async function saveFIRCaseToSupabase(firCase: any): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('fir_cases').upsert([firCase]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteFIRCaseFromSupabase(id: string): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('fir_cases').delete().eq('id', id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ==========================================
+// 6. INVESTIGATING OFFICERS (IO)
+// ==========================================
+
+export async function fetchIOsFromSupabase(): Promise<any[] | null> {
+  const client = getSupabase();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.from('investigating_officers').select('*');
+    if (error) return null;
+    return data || [];
+  } catch {
+    return null;
+  }
+}
+
+export async function saveIOToSupabase(io: any): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('investigating_officers').upsert([io]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ==========================================
+// 7. LEAVE LEDGER
+// ==========================================
+
+export async function fetchLeaveLedgerFromSupabase(): Promise<any[] | null> {
+  const client = getSupabase();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.from('leave_ledger').select('*');
+    if (error) return null;
+    return data || [];
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLeaveLedgerEntryToSupabase(entry: any): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('leave_ledger').upsert([entry]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ==========================================
+// 8. LAND DISPUTES
+// ==========================================
+
+export async function fetchLandDisputesFromSupabase(): Promise<any[] | null> {
+  const client = getSupabase();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.from('land_disputes').select('*');
+    if (error) return null;
+    return data || [];
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLandDisputeToSupabase(dispute: any): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('land_disputes').upsert([dispute]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ==========================================
+// 9. UD CASES
+// ==========================================
+
+export async function fetchUDCasesFromSupabase(): Promise<any[] | null> {
+  const client = getSupabase();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.from('ud_cases').select('*');
+    if (error) return null;
+    return data || [];
+  } catch {
+    return null;
+  }
+}
+
+export async function saveUDCaseToSupabase(udCase: any): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('ud_cases').upsert([udCase]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ==========================================
+// 10. DAILY CRIME REPORTS
+// ==========================================
+
+export async function fetchDailyReportsFromSupabase(): Promise<any[] | null> {
+  const client = getSupabase();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.from('daily_crime_reports').select('*');
+    if (error) return null;
+    return data || [];
+  } catch {
+    return null;
+  }
+}
+
+export async function saveDailyReportToSupabase(report: any): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('daily_crime_reports').upsert([report]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// ==========================================
+// 11. USER MESSAGES & DIRECTIVES
+// ==========================================
+
+export async function fetchUserMessagesFromSupabase(): Promise<any[] | null> {
+  const client = getSupabase();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.from('user_messages').select('*');
+    if (error) return null;
+    return data || [];
+  } catch {
+    return null;
+  }
+}
+
+export async function saveUserMessageToSupabase(msg: any): Promise<boolean> {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('user_messages').upsert([msg]).select();
+    return !error;
+  } catch {
+    return false;
+  }
+}
