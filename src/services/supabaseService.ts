@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getSupabase, isSupabaseConfigured } from '../lib/supabase';
 import {
   UserAccount,
   FIRCase,
@@ -9,6 +9,7 @@ import {
   UserMessage,
   LeaveLedgerEntry,
 } from '../types';
+import { INITIAL_USER_ACCOUNTS } from '../data/mockData';
 
 /**
  * Robust Supabase Service for Tarapur Police Subdivision System.
@@ -22,11 +23,12 @@ async function resilientUpsert(
   camelPayload: Record<string, any>,
   conflictKey: string = 'id'
 ): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return false;
 
   try {
     // 1. Try standard PostgreSQL snake_case payload
-    const { error: snakeError } = await supabase
+    const { error: snakeError } = await client
       .from(tableName)
       .upsert([snakePayload], { onConflict: conflictKey });
 
@@ -39,7 +41,7 @@ async function resilientUpsert(
       snakeError.code === '42703'
     ) {
       console.warn(`Retrying upsert on table '${tableName}' with camelCase payload...`);
-      const { error: camelError } = await supabase
+      const { error: camelError } = await client
         .from(tableName)
         .upsert([camelPayload], { onConflict: conflictKey });
 
@@ -57,15 +59,155 @@ async function resilientUpsert(
   }
 }
 
+// --- DIAGNOSTICS & TABLE VERIFICATION ---
+export async function testAllSupabaseTables(): Promise<{
+  connected: boolean;
+  message: string;
+  tables: Record<string, { status: 'ok' | 'missing' | 'error'; count?: number; error?: string }>;
+}> {
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) {
+    return {
+      connected: false,
+      message: 'Supabase is not configured. Please provide Project URL & Public Anon Key.',
+      tables: {},
+    };
+  }
+
+  const tableNames = [
+    'user_accounts',
+    'fir_cases',
+    'investigating_officers',
+    'leave_ledger',
+    'daily_crime_reports',
+    'land_disputes',
+    'ud_cases',
+    'user_messages',
+    'monthly_arrest_adjustments',
+  ];
+
+  const results: Record<string, { status: 'ok' | 'missing' | 'error'; count?: number; error?: string }> = {};
+  let anySuccess = false;
+
+  for (const t of tableNames) {
+    try {
+      const { data, error, count } = await client.from(t).select('*', { count: 'exact', head: true });
+      if (!error) {
+        results[t] = { status: 'ok', count: count || 0 };
+        anySuccess = true;
+      } else {
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          results[t] = { status: 'missing', error: 'Table does not exist. Run SQL script.' };
+        } else {
+          results[t] = { status: 'error', error: error.message };
+        }
+      }
+    } catch (e: any) {
+      results[t] = { status: 'error', error: e?.message || 'Network exception' };
+    }
+  }
+
+  return {
+    connected: anySuccess,
+    message: anySuccess
+      ? 'Successfully connected to Supabase database.'
+      : 'Could not query Supabase tables. Ensure SQL tables are created in Supabase SQL editor.',
+    tables: results,
+  };
+}
+
+// --- DIRECT CLOUD AUTHENTICATION ---
+export async function authenticateOfficerWithSupabase(
+  userId: string,
+  plainPassword: string
+): Promise<{ success: boolean; account?: UserAccount; error?: string }> {
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) {
+    return { success: false, error: 'Supabase not connected' };
+  }
+
+  const cleanUser = userId.trim().toLowerCase();
+  const cleanPass = plainPassword.trim();
+
+  try {
+    // 1. Try matching snake_case user_id
+    let { data, error } = await client
+      .from('user_accounts')
+      .select('*')
+      .ilike('user_id', cleanUser)
+      .eq('password', cleanPass)
+      .limit(1);
+
+    // 2. Fallback to userId if column casing is camelCase
+    if ((error || !data || data.length === 0) && (error?.code === '42703' || !data || data.length === 0)) {
+      const camelQuery = await client
+        .from('user_accounts')
+        .select('*')
+        .ilike('userId', cleanUser)
+        .eq('password', cleanPass)
+        .limit(1);
+      if (!camelQuery.error && camelQuery.data && camelQuery.data.length > 0) {
+        data = camelQuery.data;
+        error = null;
+      }
+    }
+
+    if (error) {
+      console.warn('Supabase auth error:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    if (data && data.length > 0) {
+      const d = data[0];
+      const account: UserAccount = {
+        id: d.id,
+        userId: d.user_id || d.userId || cleanUser,
+        password: d.password,
+        role: d.role,
+        permissionLevel: d.permission_level || d.permissionLevel || 'ADMIN',
+        officerName: d.officer_name || d.officerName || 'Police Officer',
+        rank: d.rank || 'Officer',
+        policeStation: d.police_station || d.policeStation || 'Subdivision HQ',
+        contactNumber: d.contact_number || d.contactNumber,
+        isActive: d.is_active !== undefined ? d.is_active : (d.isActive !== undefined ? d.isActive : true),
+        lastLogin: new Date().toISOString(),
+      };
+
+      if (!account.isActive) {
+        return { success: false, error: 'This officer account has been deactivated by the Admin.' };
+      }
+
+      // Update last_login timestamp in Supabase
+      saveUserAccountToSupabase(account).catch(() => {});
+      return { success: true, account };
+    }
+
+    return { success: false, error: 'Account not found in Supabase database with these credentials.' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Authentication error' };
+  }
+}
+
 // --- USER ACCOUNTS ---
 export async function fetchUserAccountsFromSupabase(): Promise<UserAccount[] | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
   try {
-    const { data, error } = await supabase.from('user_accounts').select('*');
+    const { data, error } = await client.from('user_accounts').select('*');
     if (error) {
       console.warn('Error fetching user accounts from Supabase:', error.message);
       return null;
     }
+
+    // If table exists but is empty, seed INITIAL_USER_ACCOUNTS automatically
+    if (!data || data.length === 0) {
+      console.log('Supabase user_accounts table is empty. Auto-seeding default accounts...');
+      for (const acc of INITIAL_USER_ACCOUNTS) {
+        await saveUserAccountToSupabase(acc);
+      }
+      return INITIAL_USER_ACCOUNTS;
+    }
+
     return (data || []).map((d: any) => ({
       id: d.id,
       userId: d.user_id || d.userId || '',
@@ -118,9 +260,10 @@ export async function saveUserAccountToSupabase(account: UserAccount): Promise<b
 }
 
 export async function deleteUserAccountFromSupabase(id: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return false;
   try {
-    const { error } = await supabase.from('user_accounts').delete().eq('id', id);
+    const { error } = await client.from('user_accounts').delete().eq('id', id);
     if (error) {
       console.error('Error deleting user account from Supabase:', error.message);
       return false;
@@ -134,12 +277,12 @@ export async function deleteUserAccountFromSupabase(id: string): Promise<boolean
 
 // --- FIR CASES ---
 export async function fetchFIRCasesFromSupabase(): Promise<FIRCase[] | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('fir_cases')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
 
     if (error) {
       console.warn('Error fetching FIR cases from Supabase:', error.message);
@@ -257,9 +400,10 @@ export async function saveFIRCaseToSupabase(firCase: FIRCase): Promise<boolean> 
 }
 
 export async function deleteFIRCaseFromSupabase(id: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return false;
   try {
-    const { error } = await supabase.from('fir_cases').delete().eq('id', id);
+    const { error } = await client.from('fir_cases').delete().eq('id', id);
     if (error) {
       console.error('Error deleting FIR case from Supabase:', error.message);
       return false;
@@ -273,12 +417,12 @@ export async function deleteFIRCaseFromSupabase(id: string): Promise<boolean> {
 
 // --- LAND DISPUTES ---
 export async function fetchLandDisputesFromSupabase(): Promise<LandDispute[] | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('land_disputes')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
 
     if (error) {
       console.warn('Error fetching land disputes from Supabase:', error.message);
@@ -296,7 +440,7 @@ export async function fetchLandDisputesFromSupabase(): Promise<LandDispute[] | n
       status: d.status || 'Pending',
       disposalDate: d.disposal_date || d.disposalDate,
       disposalRemarks: d.disposal_remarks || d.disposalRemarks,
-      janataDarbarAction: d.janata_darbar_action || d.janataDarbarAction,
+      janata_darbar_action: d.janata_darbar_action || d.janataDarbarAction,
       remarks: d.remarks,
       createdAt: d.created_at || d.createdAt || new Date().toISOString().split('T')[0],
     })) as LandDispute[];
@@ -345,9 +489,10 @@ export async function saveLandDisputeToSupabase(dispute: LandDispute): Promise<b
 }
 
 export async function deleteLandDisputeFromSupabase(id: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return false;
   try {
-    const { error } = await supabase.from('land_disputes').delete().eq('id', id);
+    const { error } = await client.from('land_disputes').delete().eq('id', id);
     if (error) {
       console.error('Error deleting land dispute from Supabase:', error.message);
       return false;
@@ -361,9 +506,10 @@ export async function deleteLandDisputeFromSupabase(id: string): Promise<boolean
 
 // --- UD CASES ---
 export async function fetchUDCasesFromSupabase(): Promise<UDCase[] | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
   try {
-    const { data, error } = await supabase.from('ud_cases').select('*');
+    const { data, error } = await client.from('ud_cases').select('*');
     if (error) {
       console.warn('Error fetching UD cases from Supabase:', error.message);
       return null;
@@ -426,9 +572,10 @@ export async function saveUDCaseToSupabase(udCase: UDCase): Promise<boolean> {
 }
 
 export async function deleteUDCaseFromSupabase(id: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return false;
   try {
-    const { error } = await supabase.from('ud_cases').delete().eq('id', id);
+    const { error } = await client.from('ud_cases').delete().eq('id', id);
     if (error) {
       console.error('Error deleting UD case from Supabase:', error.message);
       return false;
@@ -442,9 +589,10 @@ export async function deleteUDCaseFromSupabase(id: string): Promise<boolean> {
 
 // --- INVESTIGATING OFFICERS (IOs) ---
 export async function fetchIOsFromSupabase(): Promise<InvestigatingOfficer[] | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
   try {
-    const { data, error } = await supabase.from('investigating_officers').select('*');
+    const { data, error } = await client.from('investigating_officers').select('*');
     if (error) {
       console.warn('Error fetching IOs from Supabase:', error.message);
       return null;
@@ -494,9 +642,10 @@ export async function saveIOToSupabase(io: InvestigatingOfficer): Promise<boolea
 }
 
 export async function deleteIOFromSupabase(id: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return false;
   try {
-    const { error } = await supabase.from('investigating_officers').delete().eq('id', id);
+    const { error } = await client.from('investigating_officers').delete().eq('id', id);
     if (error) {
       console.error('Error deleting IO from Supabase:', error.message);
       return false;
@@ -510,9 +659,10 @@ export async function deleteIOFromSupabase(id: string): Promise<boolean> {
 
 // --- LEAVE LEDGER ---
 export async function fetchLeaveLedgerFromSupabase(): Promise<LeaveLedgerEntry[] | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('leave_ledger')
       .select('*')
       .order('departure_date', { ascending: false });
@@ -582,9 +732,10 @@ export async function saveLeaveLedgerEntryToSupabase(entry: LeaveLedgerEntry): P
 }
 
 export async function deleteLeaveLedgerEntryFromSupabase(id: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return false;
   try {
-    const { error } = await supabase.from('leave_ledger').delete().eq('id', id);
+    const { error } = await client.from('leave_ledger').delete().eq('id', id);
     if (error) {
       console.error('Error deleting leave ledger entry from Supabase:', error.message);
       return false;
@@ -598,9 +749,10 @@ export async function deleteLeaveLedgerEntryFromSupabase(id: string): Promise<bo
 
 // --- DAILY CRIME REPORTS ---
 export async function fetchDailyReportsFromSupabase(): Promise<DailyCrimeReport[] | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('daily_crime_reports')
       .select('*')
       .order('date', { ascending: false });
@@ -673,9 +825,10 @@ export async function saveDailyReportToSupabase(report: DailyCrimeReport): Promi
 }
 
 export async function deleteDailyReportFromSupabase(id: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return false;
   try {
-    const { error } = await supabase.from('daily_crime_reports').delete().eq('id', id);
+    const { error } = await client.from('daily_crime_reports').delete().eq('id', id);
     if (error) {
       console.error('Error deleting daily report from Supabase:', error.message);
       return false;
@@ -689,9 +842,10 @@ export async function deleteDailyReportFromSupabase(id: string): Promise<boolean
 
 // --- USER MESSAGES & POLICE DIRECTIVES ---
 export async function fetchUserMessagesFromSupabase(): Promise<UserMessage[] | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('user_messages')
       .select('*')
       .order('created_at', { ascending: false });
@@ -752,9 +906,10 @@ export async function saveUserMessageToSupabase(msg: UserMessage): Promise<boole
 }
 
 export async function deleteUserMessageFromSupabase(id: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) return false;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return false;
   try {
-    const { error } = await supabase.from('user_messages').delete().eq('id', id);
+    const { error } = await client.from('user_messages').delete().eq('id', id);
     if (error) {
       console.error('Error deleting user message from Supabase:', error.message);
       return false;
@@ -768,9 +923,10 @@ export async function deleteUserMessageFromSupabase(id: string): Promise<boolean
 
 // --- MONTHLY ARREST ADJUSTMENTS ---
 export async function fetchMonthlyArrestOverridesFromSupabase(): Promise<Record<string, number> | null> {
-  if (!isSupabaseConfigured() || !supabase) return null;
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
   try {
-    const { data, error } = await supabase.from('monthly_arrest_adjustments').select('*');
+    const { data, error } = await client.from('monthly_arrest_adjustments').select('*');
     if (error) {
       console.warn('Could not fetch monthly arrest adjustments from Supabase:', error.message);
       return null;
@@ -810,4 +966,74 @@ export async function saveMonthlyArrestOverrideToSupabase(
   };
 
   return resilientUpsert('monthly_arrest_adjustments', snakePayload, camelPayload, 'month_key');
+}
+
+// --- SEED ALL LOCAL DATA TO SUPABASE ---
+export async function seedAllDataToSupabase(data: {
+  userAccounts: UserAccount[];
+  cases: FIRCase[];
+  ios: InvestigatingOfficer[];
+  leaveLedger: LeaveLedgerEntry[];
+  landDisputes: LandDispute[];
+  udCases: UDCase[];
+  dailyReports: DailyCrimeReport[];
+  messages: UserMessage[];
+}): Promise<{ success: boolean; message: string; countSummary: Record<string, number> }> {
+  if (!isSupabaseConfigured() || !getSupabase()) {
+    return {
+      success: false,
+      message: 'Supabase is not configured. Please set your Supabase URL & Anon Key first.',
+      countSummary: {},
+    };
+  }
+
+  const counts: Record<string, number> = {
+    userAccounts: 0,
+    cases: 0,
+    ios: 0,
+    leaveLedger: 0,
+    landDisputes: 0,
+    udCases: 0,
+    dailyReports: 0,
+    messages: 0,
+  };
+
+  try {
+    for (const acc of data.userAccounts) {
+      if (await saveUserAccountToSupabase(acc)) counts.userAccounts++;
+    }
+    for (const c of data.cases) {
+      if (await saveFIRCaseToSupabase(c)) counts.cases++;
+    }
+    for (const io of data.ios) {
+      if (await saveIOToSupabase(io)) counts.ios++;
+    }
+    for (const l of data.leaveLedger) {
+      if (await saveLeaveLedgerEntryToSupabase(l)) counts.leaveLedger++;
+    }
+    for (const ld of data.landDisputes) {
+      if (await saveLandDisputeToSupabase(ld)) counts.landDisputes++;
+    }
+    for (const ud of data.udCases) {
+      if (await saveUDCaseToSupabase(ud)) counts.udCases++;
+    }
+    for (const rep of data.dailyReports) {
+      if (await saveDailyReportToSupabase(rep)) counts.dailyReports++;
+    }
+    for (const msg of data.messages) {
+      if (await saveUserMessageToSupabase(msg)) counts.messages++;
+    }
+
+    return {
+      success: true,
+      message: `Successfully synchronized all records with Supabase Cloud Database!`,
+      countSummary: counts,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Sync partially failed: ${err?.message || err}`,
+      countSummary: counts,
+    };
+  }
 }
