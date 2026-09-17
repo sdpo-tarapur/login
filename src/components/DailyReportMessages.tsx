@@ -25,6 +25,7 @@ interface DailyReportMessagesProps {
   onSendMessage: (msg: Omit<UserMessage, 'id' | 'createdAt'>) => void;
   onDeleteMessage?: (id: string) => void;
   onMarkAsRead?: (id: string) => void;
+  isReadOnly?: boolean;
 }
 
 export const DailyReportMessages: React.FC<DailyReportMessagesProps> = ({
@@ -35,6 +36,7 @@ export const DailyReportMessages: React.FC<DailyReportMessagesProps> = ({
   onSendMessage,
   onDeleteMessage,
   onMarkAsRead,
+  isReadOnly = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'inbox' | 'sent' | 'compose'>('inbox');
   const [recipientUserId, setRecipientUserId] = useState<string>('ALL');
@@ -157,17 +159,19 @@ export const DailyReportMessages: React.FC<DailyReportMessagesProps> = ({
             <span>Sent ({sentMessages.length})</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('compose')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition ${
-              activeTab === 'compose'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-700 text-slate-200 hover:text-white'
-            }`}
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Compose Message</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={() => setActiveTab('compose')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold text-xs transition ${
+                activeTab === 'compose'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-slate-700 text-slate-200 hover:text-white'
+              }`}
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Compose Message</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -352,18 +356,20 @@ export const DailyReportMessages: React.FC<DailyReportMessagesProps> = ({
                           </button>
                         )}
 
-                        <button
-                          onClick={() => {
-                            setRecipientUserId(msg.senderUserId);
-                            setSubject(`Re: ${msg.subject}`);
-                            setActiveTab('compose');
-                          }}
-                          className="text-slate-600 hover:text-slate-900 dark:text-slate-300 font-bold"
-                        >
-                          Reply
-                        </button>
+                        {!isReadOnly && (
+                          <button
+                            onClick={() => {
+                              setRecipientUserId(msg.senderUserId);
+                              setSubject(`Re: ${msg.subject}`);
+                              setActiveTab('compose');
+                            }}
+                            className="text-slate-600 hover:text-slate-900 dark:text-slate-300 font-bold"
+                          >
+                            Reply
+                          </button>
+                        )}
 
-                        {(isSender || currentRole === 'SDPO') && onDeleteMessage && (
+                        {!isReadOnly && (isSender || currentRole === 'SDPO') && onDeleteMessage && (
                           <button
                             onClick={() => onDeleteMessage(msg.id)}
                             className="text-rose-500 hover:text-rose-700 p-1"
