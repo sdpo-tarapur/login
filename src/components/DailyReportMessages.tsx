@@ -101,12 +101,12 @@ export const DailyReportMessages: React.FC<DailyReportMessagesProps> = ({
   const displayedList = activeTab === 'inbox' ? inboxMessages : sentMessages;
   const filteredList = displayedList.filter((m) => {
     if (!searchFilter.trim()) return true;
-    const q = searchFilter.toLowerCase();
+    const q = searchFilter.toLowerCase().trim();
     return (
-      m.subject.toLowerCase().includes(q) ||
-      m.messageText.toLowerCase().includes(q) ||
-      m.senderName.toLowerCase().includes(q) ||
-      m.recipientName.toLowerCase().includes(q)
+      (m.subject || '').toLowerCase().includes(q) ||
+      (m.messageText || '').toLowerCase().includes(q) ||
+      (m.senderName || '').toLowerCase().includes(q) ||
+      (m.recipientName || '').toLowerCase().includes(q)
     );
   });
 
