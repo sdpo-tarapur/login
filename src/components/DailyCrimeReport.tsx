@@ -56,6 +56,7 @@ interface DailyCrimeReportProps {
   onUpdateLeaveStatus?: (leaveId: string, status: 'ON_LEAVE' | 'ARRIVED' | 'OVERDUE', actualArrivalDate?: string) => void;
   onAddLeaveEntry?: (entry: LeaveLedgerEntry) => void;
   onDeleteLeaveEntry?: (leaveId: string) => void;
+  canSubmitReport?: boolean;
 }
 
 export const DailyCrimeReportSection: React.FC<DailyCrimeReportProps> = ({
@@ -68,6 +69,7 @@ export const DailyCrimeReportSection: React.FC<DailyCrimeReportProps> = ({
   onAddReport,
   onDeleteReport,
   isReadOnly = false,
+  canSubmitReport,
   messages,
   onSendMessage,
   onDeleteMessage,
@@ -226,7 +228,7 @@ export const DailyCrimeReportSection: React.FC<DailyCrimeReportProps> = ({
             <span>PDF Report</span>
           </button>
 
-          {!isReadOnly && (
+          {(canSubmitReport ?? !isReadOnly) && (
             <button
               onClick={() => setIsSubmitModalOpen(true)}
               className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs px-4 py-2 rounded-lg transition flex items-center gap-1.5 shadow-sm"
@@ -293,6 +295,7 @@ export const DailyCrimeReportSection: React.FC<DailyCrimeReportProps> = ({
           monthlyArrestOverrides={monthlyArrestOverrides}
           onUpdateMonthlyArrestOverride={onUpdateMonthlyArrestOverride}
           leaveLedger={leaveLedger}
+          isReadOnly={isReadOnly}
           onUpdateLeaveStatus={onUpdateLeaveStatus}
           onAddLeaveEntry={onAddLeaveEntry}
           onDeleteLeaveEntry={onDeleteLeaveEntry}
@@ -483,6 +486,7 @@ export const DailyCrimeReportSection: React.FC<DailyCrimeReportProps> = ({
           onSendMessage={onSendMessage}
           onDeleteMessage={onDeleteMessage}
           onMarkAsRead={onMarkMessageAsRead}
+          isReadOnly={isReadOnly}
         />
       )}
 
