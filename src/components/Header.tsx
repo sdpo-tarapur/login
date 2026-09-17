@@ -209,7 +209,11 @@ export const Header: React.FC<HeaderProps> = ({
             ) : (
               <div className="ml-auto flex items-center gap-1.5 bg-amber-500/10 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-lg text-xs font-bold">
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span>Read-Only (Viewer Rights)</span>
+                <span>
+                  {currentUserAccount?.permissionLevel === 'OPERATOR'
+                    ? 'Operator (Submit Daily Report Only)'
+                    : 'Read-Only (Viewer Rights)'}
+                </span>
               </div>
             )}
           </div>
@@ -220,7 +224,11 @@ export const Header: React.FC<HeaderProps> = ({
           {isReadOnly && (
             <div className="flex items-center gap-1.5 bg-amber-950/80 text-amber-300 font-extrabold px-2.5 py-0.5 rounded border border-amber-800 text-[11px] animate-pulse">
               <Lock className="w-3.5 h-3.5 text-amber-400" />
-              <span>VIEW-ONLY PERMISSION ACTIVE</span>
+              <span>
+                {currentUserAccount?.permissionLevel === 'OPERATOR'
+                  ? 'OPERATOR: SUBMIT DAILY REPORT ONLY (VIEW-ONLY REST)'
+                  : 'VIEW-ONLY PERMISSION ACTIVE'}
+              </span>
             </div>
           )}
           <div className="flex items-center gap-1.5 text-slate-300 font-medium text-[11px]">
