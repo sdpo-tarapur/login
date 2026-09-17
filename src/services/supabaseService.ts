@@ -1,5 +1,62 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// --- DIAGNOSTICS & TABLE VERIFICATION ---
+export async function testAllSupabaseTables(): Promise<{
+  connected: boolean;
+  message: string;
+  tables: Record<string, { status: 'ok' | 'missing' | 'error'; count?: number; error?: string }>;
+}> {
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) {
+    return {
+      connected: false,
+      message: 'Supabase is not configured. Please provide Project URL & Public Anon Key.',
+      tables: {},
+    };
+  }
+
+  const tableNames = [
+    'user_accounts',
+    'fir_cases',
+    'investigating_officers',
+    'leave_ledger',
+    'daily_crime_reports',
+    'land_disputes',
+    'ud_cases',
+    'user_messages',
+    'monthly_arrest_adjustments',
+  ];
+
+  const results: Record<string, { status: 'ok' | 'missing' | 'error'; count?: number; error?: string }> = {};
+  let anySuccess = false;
+
+  for (const t of tableNames) {
+    try {
+      const { error, count } = await client.from(t).select('*', { count: 'exact', head: true });
+      if (!error) {
+        results[t] = { status: 'ok', count: count || 0 };
+        anySuccess = true;
+      } else {
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          results[t] = { status: 'missing', error: 'Table does not exist. Run SQL script.' };
+        } else {
+          results[t] = { status: 'error', error: error.message };
+        }
+      }
+    } catch (e: any) {
+      results[t] = { status: 'error', error: e?.message || 'Network exception' };
+    }
+  }
+
+  return {
+    connected: anySuccess,
+    message: anySuccess
+      ? 'Successfully connected to Supabase database.'
+      : 'Could not query Supabase tables. Ensure SQL tables are created in Supabase SQL editor.',
+    tables: results,
+  };
+}
+
 // Retrieve Supabase URL & Anon Key from localStorage first, then fallback to import.meta.env
 export function getSupabaseCredentials(): { url: string; anonKey: string; isConfigured: boolean } {
   let url = '';
