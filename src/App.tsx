@@ -23,7 +23,7 @@ import {
   INITIAL_MESSAGES,
   INITIAL_LEAVE_LEDGER,
 } from './data/mockData';
-import { getDeadlineInfo, getPSFromRole } from './utils/helpers';
+import { getDeadlineInfo, getPSFromRole, matchesCaseFullDatabaseSearch } from './utils/helpers';
 import { Header } from './components/Header';
 import { DashboardStats } from './components/DashboardStats';
 import { FIRFilterBar } from './components/FIRFilterBar';
@@ -641,7 +641,7 @@ export default function App() {
 
   // Handlers for Daily Crime Reports
   const handleAddDailyReport = (newReportData: Omit<DailyCrimeReport, 'id'>) => {
-    if (isDailyReportReadOnly) {
+    if (isViewer) {
       alert('Permission Denied: Your account has Read-Only (VIEWER) access.');
       return;
     }
@@ -663,6 +663,10 @@ export default function App() {
   };
 
   const handleUpdateLeaveStatus = (leaveId: string, status: 'ON_LEAVE' | 'ARRIVED' | 'OVERDUE', actualArrivalDate?: string) => {
+    if (isReadOnly) {
+      alert('Permission Denied: Your account has view-only access to the leave ledger.');
+      return;
+    }
     setLeaveLedger((prev) =>
       prev.map((item) =>
         item.id === leaveId
@@ -677,10 +681,18 @@ export default function App() {
   };
 
   const handleAddLeaveEntry = (entry: LeaveLedgerEntry) => {
+    if (isReadOnly) {
+      alert('Permission Denied: Your account has view-only access to the leave ledger.');
+      return;
+    }
     setLeaveLedger((prev) => [entry, ...prev]);
   };
 
   const handleDeleteLeaveEntry = (leaveId: string) => {
+    if (isReadOnly) {
+      alert('Permission Denied: Your account has view-only access to the leave ledger.');
+      return;
+    }
     setLeaveLedger((prev) => prev.filter((item) => item.id !== leaveId));
   };
 
@@ -710,6 +722,10 @@ export default function App() {
 
   // Handlers for Inter-Desk Messages
   const handleSendMessage = (msgData: Omit<UserMessage, 'id' | 'createdAt'>) => {
+    if (isReadOnly) {
+      alert('Permission Denied: Your account has view-only access to the messages desk.');
+      return;
+    }
     const newMsg: UserMessage = {
       ...msgData,
       id: `msg-${Date.now()}`,
@@ -720,6 +736,10 @@ export default function App() {
   };
 
   const handleDeleteMessage = (msgId: string) => {
+    if (isReadOnly) {
+      alert('Permission Denied: Your account has view-only access to messages.');
+      return;
+    }
     setMessages((prev) => prev.filter((m) => m.id !== msgId));
     deleteUserMessageFromSupabase(msgId);
   };
@@ -743,6 +763,10 @@ export default function App() {
 
   // Handler for Super User Monthly Arrest Override
   const handleUpdateMonthlyArrestOverride = (monthKey: string, ps: string, figure: number) => {
+    if (isReadOnly) {
+      alert('Permission Denied: Your account cannot modify arrest overrides.');
+      return;
+    }
     const key = `${monthKey}_${ps || 'ALL'}`;
     setMonthlyArrestOverrides((prev) => ({ ...prev, [key]: figure }));
     saveMonthlyArrestOverrideToSupabase(
@@ -800,16 +824,11 @@ export default function App() {
     const deadlineInfo = getDeadlineInfo(c);
     if (filters.deadlineStatus !== 'ALL' && deadlineInfo.code !== filters.deadlineStatus) return false;
 
-    // Search Query
+    // Search Query - Full database search across all fields (FIR, SDPO Orders, CI Remarks, IO Progress Updates, Sections, Dates, Accused, etc.)
     if (filters.searchQuery && filters.searchQuery.trim()) {
-      const q = filters.searchQuery.toLowerCase();
-      const match =
-        c.firNumber.toLowerCase().includes(q) ||
-        c.sections.toLowerCase().includes(q) ||
-        c.complainantName.toLowerCase().includes(q) ||
-        c.placeOfOccurrence.toLowerCase().includes(q) ||
-        c.ioName.toLowerCase().includes(q);
-      if (!match) return false;
+      if (!matchesCaseFullDatabaseSearch(c, filters.searchQuery)) {
+        return false;
+      }
     }
 
     // FIR Date range
@@ -1012,7 +1031,8 @@ export default function App() {
             currentRole={currentRole}
             onAddReport={handleAddDailyReport}
             onDeleteReport={handleDeleteDailyReport}
-            isReadOnly={isDailyReportReadOnly}
+            isReadOnly={isReadOnly}
+            canSubmitReport={!isViewer}
             messages={messages}
             onSendMessage={handleSendMessage}
             onDeleteMessage={handleDeleteMessage}
