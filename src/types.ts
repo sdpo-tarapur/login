@@ -116,16 +116,40 @@ export interface RegisteredFIRItem {
   ioName: string;
 }
 
+export interface ODShiftItem {
+  id?: string;
+  shiftName: string; // e.g. 'OD 1 (Day Shift)', 'OD 2 (Evening Shift)', 'OD 3 (Night Shift)'
+  timeSlot: string;  // e.g. '06:00 - 14:00', '14:00 - 22:00', '22:00 - 06:00', or custom
+  ioName: string;
+  ioId?: string;
+  phone?: string;
+  remarks?: string;
+}
+
+export interface GastiShiftItem {
+  id?: string;
+  shiftName: string; // e.g. 'Morning Gasti', 'Day / Mobile Gasti', 'Night Gasti / Nakabandi', 'Rural Gasti'
+  timeSlot: string;  // e.g. '06:00 - 14:00', '14:00 - 22:00', '22:00 - 06:00', or custom
+  ioName: string;
+  ioId?: string;
+  vehicleNumber?: string;
+  sectorArea?: string;
+  forceCount?: number;
+  remarks?: string;
+}
+
 export interface OfficerOnDutyDetails {
   od1IoName?: string;
   od2IoName?: string;
   od3IoName?: string;
+  odShifts?: ODShiftItem[];
 }
 
 export interface GastiPatrolDetails {
   morningGastiIoName?: string;
   dayGastiIoName?: string;
   nightGastiIoName?: string;
+  gastiShifts?: GastiShiftItem[];
 }
 
 export interface CaseArrestItem {
@@ -194,7 +218,8 @@ export interface UserMessage {
   senderUserId: string;
   senderName: string;
   senderRole: UserRole;
-  recipientUserId: string; // Specific userId or 'ALL' or PS role or 'SDPO'
+  recipientUserId: string; // Specific userId or 'ALL' or PS role or 'SDPO' or comma-separated
+  recipientUserIds?: string[]; // Array of registered user IDs when sent to multiple officers
   recipientName: string;
   subject: string;
   messageText: string;
