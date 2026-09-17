@@ -1,0 +1,347 @@
+import { FIRCase, UserRole, PoliceStationName, CaseStatus, OfficerLeaveType } from '../types';
+
+export function calculateDaysElapsed(firDateStr: string): number {
+  if (!firDateStr) return 0;
+  const firDate = new Date(firDateStr);
+  const today = new Date();
+  
+  // Set both to midnight for exact calendar day difference
+  firDate.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  
+  const diffTime = today.getTime() - firDate.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(0, diffDays);
+}
+
+export function getDeadlineInfo(caseItem: FIRCase) {
+  if (caseItem.status === 'Chargesheeted / Final Form Submitted') {
+    return {
+      daysElapsed: calculateDaysElapsed(caseItem.firDate),
+      daysRemaining: 0,
+      code: 'COMPLETED' as const,
+      label: 'Completed / Submitted',
+      badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800',
+    };
+  }
+
+  const daysElapsed = calculateDaysElapsed(caseItem.firDate);
+  const deadline = caseItem.deadlineDays; // 60 or 90
+  const daysRemaining = deadline - daysElapsed;
+
+  if (daysRemaining < 0) {
+    return {
+      daysElapsed,
+      daysRemaining,
+      code: 'OVERDUE' as const,
+      label: `OVERDUE by ${Math.abs(daysRemaining)} days (${daysElapsed}/${deadline}d)`,
+      badgeBg: 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800 animate-pulse',
+    };
+  } else if (daysRemaining <= 15) {
+    return {
+      daysElapsed,
+      daysRemaining,
+      code: 'APPROACHING' as const,
+      label: `URGENT: ${daysRemaining} days remaining (${daysElapsed}/${deadline}d)`,
+      badgeBg: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800',
+    };
+  } else {
+    return {
+      daysElapsed,
+      daysRemaining,
+      code: 'ON_TRACK' as const,
+      label: `On Track: ${daysRemaining} days left (${daysElapsed}/${deadline}d)`,
+      badgeBg: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800',
+    };
+  }
+}
+
+export function getPSFromRole(role: UserRole): PoliceStationName | null {
+  switch (role) {
+    case 'PS_TARAPUR': return 'Tarapur';
+    case 'PS_ASARGANJ': return 'Asarganj';
+    case 'PS_SANGRAMPUR': return 'Sangrampur';
+    case 'PS_HARPUR': return 'Harpur';
+    default: return null; // SDPO and CI can view all
+  }
+}
+
+export function getRoleDisplayTitle(role: UserRole): string {
+  switch (role) {
+    case 'SDPO': return 'SDPO Tarapur (Super User)';
+    case 'CI': return 'Circle Inspector (Tarapur Circle)';
+    case 'PS_TARAPUR': return 'Tarapur Police Station';
+    case 'PS_ASARGANJ': return 'Asarganj Police Station';
+    case 'PS_SANGRAMPUR': return 'Sangrampur Police Station';
+    case 'PS_HARPUR': return 'Harpur Police Station';
+  }
+}
+
+export function formatReadableDate(dateStr?: string): string {
+  if (!dateStr) return 'N/A';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+/**
+ * Calculates arrival date when an officer departs on leave.
+ * Formula per police regulations:
+ * If an officer departs on 01/01/2026 for a leave of 4 days,
+ * his arrival date will be 06/01/2026 (departureDate + daysOnLeave + 1 calendar days).
+ */
+export function calculateArrivalDate(departureDateStr: string, daysOnLeave: number): string {
+  if (!departureDateStr) return '';
+  const days = Number(daysOnLeave);
+  if (isNaN(days) || days < 0) return '';
+
+  const parts = departureDateStr.split('-');
+  if (parts.length !== 3) return '';
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1; // 0-indexed month
+  const day = parseInt(parts[2], 10);
+
+  const d = new Date(year, month, day);
+  d.setDate(d.getDate() + days + 1);
+
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Formats YYYY-MM-DD to DD/MM/YYYY
+ */
+export function formatIndianDate(dateStr?: string): string {
+  if (!dateStr) return '—';
+  try {
+    const parts = dateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    const d = new Date(dateStr);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+export interface LeaveStatusInfo {
+  code: 'ARRIVED' | 'ARRIVING_TODAY' | 'UPCOMING' | 'OVERDUE';
+  label: string;
+  diffDays: number;
+  badgeClass: string;
+}
+
+export function getLeaveArrivalStatus(
+  arrivalDateStr: string,
+  status: string,
+  todayStr: string = new Date().toISOString().split('T')[0]
+): LeaveStatusInfo {
+  if (status === 'ARRIVED') {
+    return {
+      code: 'ARRIVED',
+      label: 'Returned & Arrived',
+      diffDays: 0,
+      badgeClass: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700',
+    };
+  }
+
+  if (!arrivalDateStr) {
+    return {
+      code: 'UPCOMING',
+      label: 'Scheduled',
+      diffDays: 0,
+      badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
+    };
+  }
+
+  // Compare calendar days
+  if (arrivalDateStr === todayStr) {
+    return {
+      code: 'ARRIVING_TODAY',
+      label: 'Arriving Today',
+      diffDays: 0,
+      badgeClass: 'bg-emerald-600 text-white font-black animate-pulse border-emerald-500 shadow-xs',
+    };
+  }
+
+  const arrivalD = new Date(arrivalDateStr);
+  const todayD = new Date(todayStr);
+  arrivalD.setHours(0, 0, 0, 0);
+  todayD.setHours(0, 0, 0, 0);
+
+  const diffMs = arrivalD.getTime() - todayD.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    const overdueDays = Math.abs(diffDays);
+    return {
+      code: 'OVERDUE',
+      label: `Overdue by ${overdueDays} day${overdueDays > 1 ? 's' : ''}`,
+      diffDays,
+      badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold',
+    };
+  }
+
+  if (diffDays === 1) {
+    return {
+      code: 'UPCOMING',
+      label: 'Arriving Tomorrow',
+      diffDays,
+      badgeClass: 'bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300 dark:border-amber-800 font-bold',
+    };
+  }
+
+  return {
+    code: 'UPCOMING',
+    label: `Arrives in ${diffDays} days`,
+    diffDays,
+    badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-800 font-medium',
+  };
+}
+
+export function normalizeLeaveType(type?: string): OfficerLeaveType {
+  if (!type) return 'CL';
+  const upper = type.toUpperCase().trim();
+  if (upper.includes('CPL') || upper.includes('COMPENSATORY')) return 'CPL';
+  if (upper.includes('CL') || upper.includes('CASUAL')) return 'CL';
+  return 'OTHERS';
+}
+
+/**
+ * Full database search across every single field of an FIR case:
+ * - FIR Number & Details
+ * - Police Station & Subdivision HQ
+ * - Registration Date (ISO & formatted)
+ * - Sections of Law (IPC/BNS)
+ * - Punishment Term (7 years or more / less than 7 years)
+ * - Complainant Name & Contact Phone
+ * - Place of Occurrence (PO)
+ * - Investigating Officer (IO) Name
+ * - Case Designation (SR / NON-SR / Pending)
+ * - Statutory Investigation Deadline (60 / 90 Days)
+ * - Current Case Status & CCTNS Sync Status
+ * - Chargesheet Number, Date & Sync Status
+ * - Case Diary (CD) Number, Date & Sync Status
+ * - PO Visit Date & Status
+ * - Supervision Note Date & Status
+ * - Progress Report (PR) Dates & Final PR Date
+ * - Case Review Dates
+ * - SDPO Tarapur Supervision Orders / Directives
+ * - Circle Inspector (CI) Supervision Remarks (For NON-SR & UD Cases)
+ * - Police Station IO Investigation Progress Updates
+ */
+export function matchesCaseFullDatabaseSearch(c: FIRCase, query: string): boolean {
+  if (!query || !query.trim()) return true;
+  const normalizedQuery = query.toLowerCase().trim();
+  const terms = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+
+  const prDatesFormatted = (c.prDates || []).flatMap((d, i) => [
+    d,
+    formatReadableDate(d),
+    `pr ${i + 1} ${d}`,
+    `pr progress report ${d}`,
+  ]);
+
+  const caseReviewDatesFormatted = (c.caseReviewDates || []).flatMap((d, i) => [
+    d,
+    formatReadableDate(d),
+    `review ${i + 1} ${d}`,
+    `case review session ${d}`,
+  ]);
+
+  const corpus = [
+    c.id,
+    c.firNumber,
+    `fir no ${c.firNumber}`,
+    `fir ${c.firNumber}`,
+    c.ps,
+    `${c.ps} ps`,
+    `${c.ps} police station`,
+    c.firDate,
+    formatReadableDate(c.firDate),
+    c.sections,
+    `ipc bns sections ${c.sections}`,
+    c.punishmentTerm === '7_years_or_more'
+      ? '7 years or more 7 yrs or more >=7 7+ years serious heinous offence'
+      : c.punishmentTerm === 'less_than_7_years'
+      ? 'less than 7 years <7 yrs <7 years bailable non-heinous'
+      : '',
+    c.complainantName,
+    `complainant ${c.complainantName}`,
+    c.complainantPhone || '',
+    c.placeOfOccurrence,
+    `place of occurrence po ${c.placeOfOccurrence}`,
+    c.ioName,
+    `investigating officer io ${c.ioName}`,
+    c.designation,
+    c.designation === 'SR'
+      ? 'special report sr case sdpo supervised'
+      : c.designation === 'NON_SR'
+      ? 'non-sr non sr nsr circle inspector ci supervised'
+      : 'pending designation unassigned',
+    c.designationDate || '',
+    c.designationDate ? formatReadableDate(c.designationDate) : '',
+    `${c.deadlineDays}`,
+    `${c.deadlineDays} days`,
+    `${c.deadlineDays}d`,
+    `${c.deadlineDays} days statutory limit`,
+    c.status,
+    c.chargesheetNumber ? `chargesheet cs no ${c.chargesheetNumber}` : '',
+    c.chargesheetDate || '',
+    c.chargesheetDate ? formatReadableDate(c.chargesheetDate) : '',
+    c.chargesheetUploadedCCTNS
+      ? 'chargesheet uploaded cs synced cctns online'
+      : 'cs pending cctns chargesheet not synced',
+    c.chargesheetCCTNSDate || '',
+    c.chargesheetCCTNSDate ? formatReadableDate(c.chargesheetCCTNSDate) : '',
+    c.caseDiaryUploadedCCTNS
+      ? 'case diary cd uploaded synced cctns'
+      : 'cd pending cctns case diary not uploaded',
+    c.lastCaseDiaryNo ? `case diary cd no ${c.lastCaseDiaryNo}` : '',
+    c.lastCaseDiaryDate || '',
+    c.lastCaseDiaryDate ? formatReadableDate(c.lastCaseDiaryDate) : '',
+    c.poVisitDate
+      ? `po visited place of occurrence ${c.poVisitDate} ${formatReadableDate(c.poVisitDate)}`
+      : 'po pending not visited',
+    c.supervisionDate
+      ? `supervision note issued ${c.supervisionDate} ${formatReadableDate(c.supervisionDate)}`
+      : 'supervision pending note not issued',
+    ...prDatesFormatted,
+    c.finalPrDate ? `final pr ${c.finalPrDate} ${formatReadableDate(c.finalPrDate)}` : '',
+    ...caseReviewDatesFormatted,
+    // SDPO Tarapur Supervision Orders / Directives
+    c.sdpoSupervisionNote
+      ? `sdpo tarapur supervision orders directives memo instructions guidance ${c.sdpoSupervisionNote}`
+      : '',
+    // Circle Inspector (CI) Supervision Remarks (For NON-SR & UD Cases)
+    c.ciSupervisionNote
+      ? `circle inspector ci supervision remarks for non-sr & ud cases non-sr ud cases direction ${c.ciSupervisionNote}`
+      : '',
+    // Police Station IO Investigation Progress Updates
+    c.psProgressRemarks
+      ? `police station io investigation progress updates station diary case progress steps arrested recovered raided seized ${c.psProgressRemarks}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  // Match if entire query is present as a substring OR all search terms are satisfied
+  if (corpus.includes(normalizedQuery)) return true;
+  return terms.every((term) => corpus.includes(term));
+}
+
