@@ -219,3 +219,61 @@ export function normalizeLeaveType(type?: string): OfficerLeaveType {
   if (upper.includes('CL') || upper.includes('CASUAL')) return 'CL';
   return 'OTHERS';
 }
+
+/**
+ * Full database search across all fields of an FIR case:
+ * FIR #, PS, Date, Sections, Punishment Term, Complainant Name & Phone, Place of Occurrence,
+ * IO Name, Designation (SR / NON-SR), 60/90 Days limit, Case Status,
+ * Chargesheet # & Date, CCTNS statuses, Case Diary # & Date,
+ * PO Visit Date, Supervision Note Date, Directives, PR Dates, Case Review Dates,
+ * SDPO Supervision Note, CI Supervision Note, and PS Progress Remarks.
+ */
+export function matchesCaseFullDatabaseSearch(c: FIRCase, query: string): boolean {
+  if (!query || !query.trim()) return true;
+  const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+
+  const corpus = [
+    c.firNumber,
+    c.ps,
+    `${c.ps} ps`,
+    `${c.ps} police station`,
+    c.firDate,
+    c.sections,
+    c.punishmentTerm === '7_years_or_more'
+      ? '7 years or more 7 yrs or more >=7'
+      : c.punishmentTerm === 'less_than_7_years'
+      ? 'less than 7 years <7 yrs'
+      : '',
+    c.complainantName,
+    c.complainantPhone || '',
+    c.placeOfOccurrence,
+    c.ioName,
+    c.designation,
+    c.designation === 'SR' ? 'special report sr' : 'non-sr non sr nsr',
+    `${c.deadlineDays}`,
+    `${c.deadlineDays} days`,
+    `${c.deadlineDays}d`,
+    c.status,
+    c.chargesheetNumber || '',
+    c.chargesheetDate || '',
+    c.chargesheetUploadedCCTNS ? 'chargesheet uploaded cs synced cctns' : 'cs pending cctns',
+    c.chargesheetCCTNSDate || '',
+    c.caseDiaryUploadedCCTNS ? 'case diary cd uploaded synced cctns' : 'cd pending cctns',
+    c.lastCaseDiaryNo || '',
+    c.lastCaseDiaryDate || '',
+    c.poVisitDate ? `po visited ${c.poVisitDate}` : 'po pending',
+    c.supervisionDate ? `supervision note issued ${c.supervisionDate}` : 'supervision pending',
+    ...(c.prDates || []),
+    c.finalPrDate ? `final pr ${c.finalPrDate}` : '',
+    ...(c.caseReviewDates || []),
+    c.sdpoSupervisionNote || '',
+    c.ciSupervisionNote || '',
+    c.psProgressRemarks || '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return terms.every((term) => corpus.includes(term));
+}
+
