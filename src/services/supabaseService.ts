@@ -27,10 +27,11 @@ async function resilientUpsert(
   if (!isSupabaseConfigured() || !client) return false;
 
   try {
-    // 1. Try standard PostgreSQL snake_case payload
+    // 1. Try standard PostgreSQL snake_case payload with .select() to ensure proper execution
     const { error: snakeError } = await client
       .from(tableName)
-      .upsert([snakePayload], { onConflict: conflictKey });
+      .upsert([snakePayload], { onConflict: conflictKey })
+      .select();
 
     if (!snakeError) return true;
 
@@ -43,7 +44,8 @@ async function resilientUpsert(
       console.warn(`Retrying upsert on table '${tableName}' with camelCase payload...`);
       const { error: camelError } = await client
         .from(tableName)
-        .upsert([camelPayload], { onConflict: conflictKey });
+        .upsert([camelPayload], { onConflict: conflictKey })
+        .select();
 
       if (!camelError) return true;
 
