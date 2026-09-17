@@ -89,6 +89,7 @@ export interface LandDispute {
   disposalDate?: string;
   disposalRemarks?: string;
   janataDarbarAction?: string;
+  remarks?: string;
   createdAt: string;
 }
 
