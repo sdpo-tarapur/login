@@ -181,11 +181,11 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
 
       // Search query
       if (leaveSearch.trim()) {
-        const q = leaveSearch.toLowerCase();
-        const matchName = item.officerName.toLowerCase().includes(q);
-        const matchRank = item.rank.toLowerCase().includes(q);
-        const matchPS = item.ps.toLowerCase().includes(q);
-        const matchType = normalizeLeaveType(item.leaveType).toLowerCase().includes(q);
+        const q = leaveSearch.toLowerCase().trim();
+        const matchName = (item.officerName || '').toLowerCase().includes(q);
+        const matchRank = (item.rank || '').toLowerCase().includes(q);
+        const matchPS = (item.ps || '').toLowerCase().includes(q);
+        const matchType = normalizeLeaveType(item.leaveType || '').toLowerCase().includes(q);
         const matchRemarks = (item.remarks || '').toLowerCase().includes(q);
         if (!matchName && !matchRank && !matchPS && !matchRemarks && !matchType) return false;
       }
