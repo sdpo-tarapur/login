@@ -221,59 +221,127 @@ export function normalizeLeaveType(type?: string): OfficerLeaveType {
 }
 
 /**
- * Full database search across all fields of an FIR case:
- * FIR #, PS, Date, Sections, Punishment Term, Complainant Name & Phone, Place of Occurrence,
- * IO Name, Designation (SR / NON-SR), 60/90 Days limit, Case Status,
- * Chargesheet # & Date, CCTNS statuses, Case Diary # & Date,
- * PO Visit Date, Supervision Note Date, Directives, PR Dates, Case Review Dates,
- * SDPO Supervision Note, CI Supervision Note, and PS Progress Remarks.
+ * Full database search across every single field of an FIR case:
+ * - FIR Number & Details
+ * - Police Station & Subdivision HQ
+ * - Registration Date (ISO & formatted)
+ * - Sections of Law (IPC/BNS)
+ * - Punishment Term (7 years or more / less than 7 years)
+ * - Complainant Name & Contact Phone
+ * - Place of Occurrence (PO)
+ * - Investigating Officer (IO) Name
+ * - Case Designation (SR / NON-SR / Pending)
+ * - Statutory Investigation Deadline (60 / 90 Days)
+ * - Current Case Status & CCTNS Sync Status
+ * - Chargesheet Number, Date & Sync Status
+ * - Case Diary (CD) Number, Date & Sync Status
+ * - PO Visit Date & Status
+ * - Supervision Note Date & Status
+ * - Progress Report (PR) Dates & Final PR Date
+ * - Case Review Dates
+ * - SDPO Tarapur Supervision Orders / Directives
+ * - Circle Inspector (CI) Supervision Remarks (For NON-SR & UD Cases)
+ * - Police Station IO Investigation Progress Updates
  */
 export function matchesCaseFullDatabaseSearch(c: FIRCase, query: string): boolean {
   if (!query || !query.trim()) return true;
-  const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const normalizedQuery = query.toLowerCase().trim();
+  const terms = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+
+  const prDatesFormatted = (c.prDates || []).flatMap((d, i) => [
+    d,
+    formatReadableDate(d),
+    `pr ${i + 1} ${d}`,
+    `pr progress report ${d}`,
+  ]);
+
+  const caseReviewDatesFormatted = (c.caseReviewDates || []).flatMap((d, i) => [
+    d,
+    formatReadableDate(d),
+    `review ${i + 1} ${d}`,
+    `case review session ${d}`,
+  ]);
 
   const corpus = [
+    c.id,
     c.firNumber,
+    `fir no ${c.firNumber}`,
+    `fir ${c.firNumber}`,
     c.ps,
     `${c.ps} ps`,
     `${c.ps} police station`,
     c.firDate,
+    formatReadableDate(c.firDate),
     c.sections,
+    `ipc bns sections ${c.sections}`,
     c.punishmentTerm === '7_years_or_more'
-      ? '7 years or more 7 yrs or more >=7'
+      ? '7 years or more 7 yrs or more >=7 7+ years serious heinous offence'
       : c.punishmentTerm === 'less_than_7_years'
-      ? 'less than 7 years <7 yrs'
+      ? 'less than 7 years <7 yrs <7 years bailable non-heinous'
       : '',
     c.complainantName,
+    `complainant ${c.complainantName}`,
     c.complainantPhone || '',
     c.placeOfOccurrence,
+    `place of occurrence po ${c.placeOfOccurrence}`,
     c.ioName,
+    `investigating officer io ${c.ioName}`,
     c.designation,
-    c.designation === 'SR' ? 'special report sr' : 'non-sr non sr nsr',
+    c.designation === 'SR'
+      ? 'special report sr case sdpo supervised'
+      : c.designation === 'NON_SR'
+      ? 'non-sr non sr nsr circle inspector ci supervised'
+      : 'pending designation unassigned',
+    c.designationDate || '',
+    c.designationDate ? formatReadableDate(c.designationDate) : '',
     `${c.deadlineDays}`,
     `${c.deadlineDays} days`,
     `${c.deadlineDays}d`,
+    `${c.deadlineDays} days statutory limit`,
     c.status,
-    c.chargesheetNumber || '',
+    c.chargesheetNumber ? `chargesheet cs no ${c.chargesheetNumber}` : '',
     c.chargesheetDate || '',
-    c.chargesheetUploadedCCTNS ? 'chargesheet uploaded cs synced cctns' : 'cs pending cctns',
+    c.chargesheetDate ? formatReadableDate(c.chargesheetDate) : '',
+    c.chargesheetUploadedCCTNS
+      ? 'chargesheet uploaded cs synced cctns online'
+      : 'cs pending cctns chargesheet not synced',
     c.chargesheetCCTNSDate || '',
-    c.caseDiaryUploadedCCTNS ? 'case diary cd uploaded synced cctns' : 'cd pending cctns',
-    c.lastCaseDiaryNo || '',
+    c.chargesheetCCTNSDate ? formatReadableDate(c.chargesheetCCTNSDate) : '',
+    c.caseDiaryUploadedCCTNS
+      ? 'case diary cd uploaded synced cctns'
+      : 'cd pending cctns case diary not uploaded',
+    c.lastCaseDiaryNo ? `case diary cd no ${c.lastCaseDiaryNo}` : '',
     c.lastCaseDiaryDate || '',
-    c.poVisitDate ? `po visited ${c.poVisitDate}` : 'po pending',
-    c.supervisionDate ? `supervision note issued ${c.supervisionDate}` : 'supervision pending',
-    ...(c.prDates || []),
-    c.finalPrDate ? `final pr ${c.finalPrDate}` : '',
-    ...(c.caseReviewDates || []),
-    c.sdpoSupervisionNote || '',
-    c.ciSupervisionNote || '',
-    c.psProgressRemarks || '',
+    c.lastCaseDiaryDate ? formatReadableDate(c.lastCaseDiaryDate) : '',
+    c.poVisitDate
+      ? `po visited place of occurrence ${c.poVisitDate} ${formatReadableDate(c.poVisitDate)}`
+      : 'po pending not visited',
+    c.supervisionDate
+      ? `supervision note issued ${c.supervisionDate} ${formatReadableDate(c.supervisionDate)}`
+      : 'supervision pending note not issued',
+    ...prDatesFormatted,
+    c.finalPrDate ? `final pr ${c.finalPrDate} ${formatReadableDate(c.finalPrDate)}` : '',
+    ...caseReviewDatesFormatted,
+    // SDPO Tarapur Supervision Orders / Directives
+    c.sdpoSupervisionNote
+      ? `sdpo tarapur supervision orders directives memo instructions guidance ${c.sdpoSupervisionNote}`
+      : '',
+    // Circle Inspector (CI) Supervision Remarks (For NON-SR & UD Cases)
+    c.ciSupervisionNote
+      ? `circle inspector ci supervision remarks for non-sr & ud cases non-sr ud cases direction ${c.ciSupervisionNote}`
+      : '',
+    // Police Station IO Investigation Progress Updates
+    c.psProgressRemarks
+      ? `police station io investigation progress updates station diary case progress steps arrested recovered raided seized ${c.psProgressRemarks}`
+      : '',
   ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
 
+  // Match if entire query is present as a substring OR all search terms are satisfied
+  if (corpus.includes(normalizedQuery)) return true;
   return terms.every((term) => corpus.includes(term));
 }
 
