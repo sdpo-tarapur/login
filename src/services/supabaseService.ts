@@ -1,4 +1,20 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+// --- USER ACCOUNTS ---
+export async function fetchUserAccountsFromSupabase(): Promise<any[] | null> {
+  const client = getSupabase();
+  if (!isSupabaseConfigured() || !client) return null;
+  try {
+    const { data, error } = await client.from('user_accounts').select('*');
+    if (error) {
+      console.warn('Error fetching user accounts from Supabase:', error.message);
+      return null;
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('Supabase exception in fetchUserAccounts:', err);
+    return null;
+  }
+}
 
 // --- SEED ALL LOCAL DATA TO SUPABASE ---
 export async function seedAllDataToSupabase(data: {
