@@ -35,6 +35,7 @@ import { exportToExcel, exportToPDF } from '../utils/reportExport';
 import { DailyReportDashboard } from './DailyReportDashboard';
 import { DailyReportSubmitModal } from './DailyReportSubmitModal';
 import { DailyReportMessages } from './DailyReportMessages';
+import { DailyReportHistoricalRegister } from './DailyReportHistoricalRegister';
 
 interface DailyCrimeReportProps {
   reports: DailyCrimeReport[];
@@ -84,8 +85,8 @@ export const DailyCrimeReportSection: React.FC<DailyCrimeReportProps> = ({
   const activePS = getPSFromRole(currentRole);
   const isSuperUser = currentRole === 'SDPO';
 
-  // Sub-tab inside Daily Reports: Dashboard, Diary Log, or Messages
-  const [subTab, setSubTab] = useState<'dashboard' | 'logs' | 'messages'>('dashboard');
+  // Sub-tab inside Daily Reports: Dashboard, Diary Log, Historical Register, or Messages
+  const [subTab, setSubTab] = useState<'dashboard' | 'logs' | 'register' | 'messages'>('dashboard');
 
   // New Report Modal
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
@@ -256,7 +257,7 @@ export const DailyCrimeReportSection: React.FC<DailyCrimeReportProps> = ({
 
         <button
           onClick={() => setSubTab('logs')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-extrabold text-xs transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-extrabold text-xs transition cursor-pointer ${
             subTab === 'logs'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -267,8 +268,20 @@ export const DailyCrimeReportSection: React.FC<DailyCrimeReportProps> = ({
         </button>
 
         <button
+          onClick={() => setSubTab('register')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-extrabold text-xs transition cursor-pointer ${
+            subTab === 'register'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          <span>Historical Register & IO Duty Tracker</span>
+        </button>
+
+        <button
           onClick={() => setSubTab('messages')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-extrabold text-xs transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-extrabold text-xs transition cursor-pointer ${
             subTab === 'messages'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -476,7 +489,18 @@ export const DailyCrimeReportSection: React.FC<DailyCrimeReportProps> = ({
         </div>
       )}
 
-      {/* Sub-Tab 3: Messages Desk */}
+      {/* Sub-Tab 3: Historical Register & IO Duty Tracker */}
+      {subTab === 'register' && (
+        <DailyReportHistoricalRegister
+          reports={reports}
+          investigatingOfficers={ios}
+          currentRole={currentRole}
+          activePS={activePS}
+          onViewReport={(report) => setViewingReport(report)}
+        />
+      )}
+
+      {/* Sub-Tab 4: Messages Desk */}
       {subTab === 'messages' && (
         <DailyReportMessages
           messages={messages}
