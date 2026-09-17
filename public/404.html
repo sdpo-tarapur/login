@@ -2,21 +2,19 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>SDPO Portal</title>
+    <title>SDPO Portal - Redirecting...</title>
     <script type="text/javascript">
-      // Single Page Apps for GitHub Pages
-      // https://github.com/rafgraph/spa-github-pages
-      var pathSegmentsToKeep = 0;
-      var l = window.location;
-      l.replace(
-        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
-        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
-        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-        l.hash
-      );
+      // Safely redirect to the repository base on GitHub Pages or custom domain
+      var segments = window.location.pathname.split('/').filter(Boolean);
+      // If deployed on github.io with a sub-path, segments[0] is the repository name
+      var isGitHubPages = window.location.hostname.endsWith('github.io');
+      var targetPath = isGitHubPages && segments.length > 0 ? '/' + segments[0] + '/' : '/';
+      window.location.replace(window.location.origin + targetPath);
     </script>
   </head>
-  <body>
+  <body style="font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 50px 20px; color: #1e293b; background-color: #f8fafc;">
+    <h2 style="font-size: 20px; font-weight: 700;">Subdivisional Police Office Tarapur Portal</h2>
+    <p style="color: #64748b; font-size: 14px; margin-top: 8px;">Redirecting to the portal homepage...</p>
+    <p style="margin-top: 16px;"><a href="./" style="color: #2563eb; text-decoration: underline; font-weight: 600;">Click here if not redirected automatically</a></p>
   </body>
 </html>
