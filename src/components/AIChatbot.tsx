@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Bot, Send, BarChart2, Shield, Users, TrendingUp, AlertTriangle, Sparkles } from 'lucide-react';
+import { Bot, Send, BarChart2, Shield, Sparkles, X } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
 
 interface AIChatbotProps {
   cases: any[];
@@ -16,6 +17,7 @@ interface AIChatbotProps {
 export const AIChatbot: React.FC<AIChatbotProps> = ({
   cases,
   landDisputes,
+  udCases,
   ios,
   dailyReports,
   currentRole,
@@ -25,15 +27,15 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
   const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string; analytics?: any }>>([
     {
       sender: 'ai',
-      text: `Jai Hind! I am your Subdivision AI Intelligence & Analytics Assistant. I have live access to your Subdivision database (${cases.length} FIRs, ${ios.length} IOs, ${dailyReports.length} Daily Reports). How can I assist you with performance tracking or duty allocations today?`,
+      text: `Jai Hind! I am your Subdivision AI Intelligence & Analytics Assistant. I have live access to your Subdivision database (${cases.length} FIRs, ${ios.length} IOs, ${dailyReports.length} Daily Reports). You can ask me anything about case statuses, IO performance, station comparisons, or general queries!`,
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Advanced Analytical Computations
+  // Helper for IO Performance Analytics
   const getIOPerformanceReport = () => {
-    const ioStats: Record<string, { name: string; ps: string; totalAssigned: int; disposed: int }> = {};
+    const ioStats: Record<string, { name: string; ps: string; totalAssigned: number; disposed: number }> = {};
     ios.forEach((io) => {
       ioStats[io.name] = { name: io.name, ps: io.ps, totalAssigned: 0, disposed: 0 };
     });
@@ -50,6 +52,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
     return Object.values(ioStats);
   };
 
+  // Helper for Police Station Comparison
   const getPSComparison = () => {
     const psMap: Record<string, { total: number; disposed: number; pending: number }> = {
       Tarapur: { total: 0, disposed: 0, pending: 0 },
@@ -69,14 +72,16 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
     return psMap;
   };
 
-  const generateAIResponse = (query: string) => {
+  // AI Response Generator (Combines Gemini API with Local Database Analytics)
+  const handleGenerateResponse = async (query: string) => {
     const q = query.toLowerCase();
 
+    // Check for specific shortcut commands first for instant visual analytics
     if (q.includes('io performance') || q.includes('officer performance') || q.includes('month wise')) {
       const perf = getIOPerformanceReport();
       const topIo = perf.sort((a, b) => b.disposed - a.disposed)[0];
       return {
-        text: `📊 **Investigating Officer (IO) Performance Analysis:**\nTotal Active Officers Tracked: **${ios.length}**.\n\nTop Performing Officer: **${topIo ? topIo.name : 'N/A'}** (${topIo?.disposed || 0} cases disposed out of ${topIo?.totalAssigned || 0}).\n\n*Would you like a detailed month-wise breakdown for a specific officer?*`,
+        text: `📊 **Investigating Officer (IO) Performance Analysis:**\nTotal Active Officers Tracked: **${ios.length}**.\n\nTop Performing Officer: **${topIo ? topIo.name : 'N/A'}** (${topIo?.disposed || 0} cases disposed out of ${topIo?.totalAssigned || 0}).`,
         analytics: { type: 'io_perf', data: perf },
       };
     }
@@ -96,24 +101,46 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
     if (q.includes('duty allocation') || q.includes('suggest duty') || q.includes('allocate')) {
       const availableIOs = ios.filter((i) => i.status === 'ACTIVE');
       return {
-        text: `🤖 **AI Duty Allocation Recommendation:**\nBased on current caseload and active status:\n\n1. **High-Priority Case (SR Desk):** Recommend assigning to senior IO **${availableIOs[0]?.name || 'Available SI'}** (${availableIOs[0]?.ps} PS) who currently has optimal bandwidth.\n2. **Gasti / Night Patrolling:** Recommend rotating officers with low recent patrol entries from the daily log archive.\n\n*Shall I dispatch this recommendation as an official directive?*`,
+        text: `🤖 **AI Duty Allocation Recommendation:**\nBased on current caseload and active status:\n\n1. **High-Priority Case (SR Desk):** Recommend assigning to senior IO **${availableIOs[0]?.name || 'Available SI'}** (${availableIOs[0]?.ps} PS).\n2. **Gasti / Night Patrolling:** Recommend rotating officers with low recent patrol entries from the daily log archive.`,
       };
     }
 
-    if (q.includes('land dispute') || q.includes('janata darbar')) {
-      const pendingLD = landDisputes.filter((l) => l.status === 'Pending').length;
-      return {
-        text: `⚖️ **Land Dispute & Janata Darbar Intelligence:**\nThere are currently **${pendingLD}** active un-disposed land disputes across the subdivision. Immediate listing for the upcoming Janata Darbar is advised to prevent escalation.`,
-      };
+    // Try calling Google Gen AI if API key is configured
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (apiKey) {
+        const ai = new GoogleGenAI({ apiKey });
+        const dbContext = `Subdivision Data: Total FIRs: ${cases.length}, Active IOs: ${ios.length}, Land Disputes: ${landDisputes.length}, UD Cases: ${udCases.length}, Daily Reports: ${dailyReports.length}. Current Role: ${currentRole}, Active PS: ${activePS || 'All'}`;
+        
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `You are an expert AI assistant for the Tarapur Police Subdivision Portal (Bihar Police). Answer the user's question accurately, professionally, and concisely using the following database context if relevant:\n${dbContext}\n\nUser Question: ${query}`
+                }
+              ]
+            }
+          ]
+        });
+
+        if (response.text) {
+          return { text: response.text };
+        }
+      }
+    } catch (err) {
+      console.warn('Gemini API call skipped or failed, falling back to local analytical engine:', err);
     }
 
-    // Default Intelligence Summary
+    // Fallback general response if API key is not set
     return {
       text: `🔍 I analyzed your query regarding "${query}". Across the subdivision, we have **${cases.length}** total registered FIRs and **${dailyReports.length}** logged daily intelligence reports. You can ask me for:\n- *"Show IO performance analysis"*\n- *"Compare Tarapur and Asarganj PS"*\n- *"Suggest duty allocations for today"*`,
     };
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
 
@@ -122,11 +149,14 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
     setMessages((prev) => [...prev, { sender: 'user', text: userText }]);
     setLoading(true);
 
-    setTimeout(() => {
-      const aiRes = generateAIResponse(userText);
+    try {
+      const aiRes = await handleGenerateResponse(userText);
       setMessages((prev) => [...prev, { sender: 'ai', text: aiRes.text, analytics: aiRes.analytics }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { sender: 'ai', text: 'Sorry, an error occurred while processing your query.' }]);
+    } finally {
       setLoading(false);
-    }, 600);
+    }
   };
 
   const containerStyle = isEmbeddedTab
@@ -143,7 +173,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
           </div>
           <div>
             <h3 className="font-extrabold text-xs text-white">Subdivision AI Intelligence & Analytics</h3>
-            <p className="text-[10px] text-slate-400">Live Database Analytics & Duty Allocations</p>
+            <p className="text-[10px] text-slate-400">Live Database Analytics & Generative AI</p>
           </div>
         </div>
       </div>
@@ -162,7 +192,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
               {m.text}
             </div>
 
-            {/* Optional Graphical Analytics Rendering inside Chat */}
+            {/* Graphical Analytics Rendering */}
             {m.analytics?.type === 'ps_comp' && (
               <div className="mt-2 w-full bg-slate-50 dark:bg-slate-950 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1.5">
                 <span className="font-bold text-[10px] text-blue-600 flex items-center gap-1">
@@ -188,7 +218,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
         ))}
         {loading && (
           <div className="text-slate-400 text-[11px] italic animate-pulse">
-            Analyzing live database and computing analytics...
+            Analyzing live database and computing AI response...
           </div>
         )}
       </div>
@@ -196,18 +226,21 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
       {/* Quick Prompt Pills */}
       <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex gap-1.5 overflow-x-auto text-[10px]">
         <button
+          type="button"
           onClick={() => setInput('Show IO performance analysis')}
           className="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
         >
           📊 IO Performance
         </button>
         <button
+          type="button"
           onClick={() => setInput('Compare police stations case load')}
           className="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
         >
           📈 Station Comparison
         </button>
         <button
+          type="button"
           onClick={() => setInput('Suggest duty allocations')}
           className="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
         >
@@ -221,7 +254,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask for analytics, IO stats, or duty advice..."
+          placeholder="Ask any question or request analytics..."
           className="flex-1 p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white"
         />
         <button
