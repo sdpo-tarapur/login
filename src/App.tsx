@@ -57,6 +57,9 @@ import {
   fetchIOsFromSupabase,
   saveIOToSupabase,
   deleteIOFromSupabase,
+  fetchLeaveLedgerFromSupabase,
+  saveLeaveLedgerEntryToSupabase,
+  deleteLeaveLedgerEntryFromSupabase,
   fetchDailyReportsFromSupabase,
   saveDailyReportToSupabase,
   deleteDailyReportFromSupabase,
@@ -303,6 +306,12 @@ export default function App() {
       fetchIOsFromSupabase().then((ioList) => {
         if (ioList && ioList.length > 0) {
           setIos(ioList);
+        }
+      });
+      // Fetch Leave Ledger
+      fetchLeaveLedgerFromSupabase().then((leaveList) => {
+        if (leaveList && leaveList.length > 0) {
+          setLeaveLedger(leaveList);
         }
       });
       // Fetch Daily Reports
@@ -614,6 +623,15 @@ export default function App() {
     saveIOToSupabase(newIO);
   };
 
+  const handleUpdateIO = (updatedIO: InvestigatingOfficer) => {
+    if (isReadOnly) {
+      alert('Permission Denied: Your account has Read-Only (VIEWER) access.');
+      return;
+    }
+    setIos((prev) => prev.map((io) => (io.id === updatedIO.id ? updatedIO : io)));
+    saveIOToSupabase(updatedIO);
+  };
+
   const handleDeleteIO = (ioId: string) => {
     if (isReadOnly) {
       alert('Permission Denied: Your account has Read-Only (VIEWER) access.');
@@ -657,6 +675,7 @@ export default function App() {
       setLeaveLedger((prev) => {
         const existingIds = new Set(prev.map((l) => l.id));
         const toAdd = (newReport.leaveLedgerEntries || []).filter((e) => !existingIds.has(e.id));
+        toAdd.forEach((entry) => saveLeaveLedgerEntryToSupabase(entry));
         return [...toAdd, ...prev];
       });
     }
@@ -668,15 +687,18 @@ export default function App() {
       return;
     }
     setLeaveLedger((prev) =>
-      prev.map((item) =>
-        item.id === leaveId
-          ? {
-              ...item,
-              status,
-              actualArrivalDate: status === 'ARRIVED' ? (actualArrivalDate || new Date().toISOString().split('T')[0]) : undefined,
-            }
-          : item
-      )
+      prev.map((item) => {
+        if (item.id === leaveId) {
+          const updated: LeaveLedgerEntry = {
+            ...item,
+            status,
+            actualArrivalDate: status === 'ARRIVED' ? (actualArrivalDate || new Date().toISOString().split('T')[0]) : undefined,
+          };
+          saveLeaveLedgerEntryToSupabase(updated);
+          return updated;
+        }
+        return item;
+      })
     );
   };
 
@@ -686,6 +708,7 @@ export default function App() {
       return;
     }
     setLeaveLedger((prev) => [entry, ...prev]);
+    saveLeaveLedgerEntryToSupabase(entry);
   };
 
   const handleDeleteLeaveEntry = (leaveId: string) => {
@@ -694,6 +717,7 @@ export default function App() {
       return;
     }
     setLeaveLedger((prev) => prev.filter((item) => item.id !== leaveId));
+    deleteLeaveLedgerEntryFromSupabase(leaveId);
   };
 
   const handleDeleteDailyReport = (id: string) => {
@@ -1009,8 +1033,14 @@ export default function App() {
           <IOManagement
             ios={ios}
             cases={cases}
+            leaveLedger={leaveLedger}
+            dailyReports={dailyReports}
             onAddIO={handleAddIO}
+            onUpdateIO={handleUpdateIO}
             onDeleteIO={handleDeleteIO}
+            onUpdateLeaveStatus={handleUpdateLeaveStatus}
+            onAddLeaveEntry={handleAddLeaveEntry}
+            onDeleteLeaveEntry={handleDeleteLeaveEntry}
             currentRole={currentRole}
             onSelectIOCasesFilter={(ioName) => {
               setFilters((prev) => ({ ...prev, ioNames: [ioName] }));
