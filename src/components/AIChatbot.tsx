@@ -23,11 +23,11 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
   activePS,
   isEmbeddedTab = false,
 }) => {
-  // Toggle state for floating button vs open chat box
   const [isOpen, setIsOpen] = useState(isEmbeddedTab);
 
+  // Checks localStorage first, then falls back to Venv/Vite env if configured
   const [apiKey, setApiKey] = useState<string>(() => {
-    return localStorage.getItem('gemini_custom_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '';
+    return localStorage.getItem('groq_custom_api_key') || import.meta.env.VITE_GROQ_API_KEY || '';
   });
   const [showKeyInput, setShowKeyInput] = useState<boolean>(!apiKey);
   const [tempKey, setTempKey] = useState<string>('');
@@ -35,7 +35,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
   const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string }>>([
     {
       sender: 'ai',
-      text: `Jai Hind! I am your AI Assistant. I have access to your database (${cases.length} FIRs, ${ios.length} IOs) and general web knowledge. Ask me anything!`,
+      text: `Jai Hind! I am your Llama 3 AI Assistant powered by Groq. I have context of your live database (${cases.length} FIRs, ${ios.length} IOs) and general internet knowledge. Ask me anything!`,
     },
   ]);
   const [input, setInput] = useState('');
@@ -44,14 +44,14 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
   const handleSaveKey = (e: React.FormEvent) => {
     e.preventDefault();
     if (!tempKey.trim()) return;
-    localStorage.setItem('gemini_custom_api_key', tempKey.trim());
+    localStorage.setItem('groq_custom_api_key', tempKey.trim());
     setApiKey(tempKey.trim());
     setShowKeyInput(false);
     setTempKey('');
   };
 
   const handleClearKey = () => {
-    localStorage.removeItem('gemini_custom_api_key');
+    localStorage.removeItem('groq_custom_api_key');
     setApiKey('');
     setShowKeyInput(true);
   };
@@ -82,20 +82,25 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
         - Active Police Station Filter: ${activePS || 'All'}
       `;
 
-      // Using the correct, supported stable model endpoint: gemini-2.0-flash
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+      // Groq OpenAI-compatible endpoint using Llama 3 (lightning fast)
+      const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
 
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
         body: JSON.stringify({
-          contents: [
+          model: 'llama-3.3-70b-versatile', // High-performance open-source model available on Groq free tier
+          messages: [
             {
-              parts: [
-                {
-                  text: `You are an expert AI intelligence assistant for the Police Subdivision Portal. Use the following live database context if the user asks about internal records, or answer freely using general knowledge if they ask about anything else from the internet:\n\n${dbContext}\n\nUser Question: ${userQuery}`
-                }
-              ]
+              role: 'system',
+              content: `You are an expert AI intelligence assistant for a Police Subdivision Portal. Use the following live database context if the user asks about internal records, or answer freely using general knowledge if they ask about anything else from the internet:\n\n${dbContext}`
+            },
+            {
+              role: 'user',
+              content: userQuery
             }
           ]
         })
@@ -107,28 +112,26 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
       }
 
       const data = await response.json();
-      const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
+      const replyText = data.choices?.[0]?.message?.content || 'No response generated.';
       
       setMessages((prev) => [...prev, { sender: 'ai', text: replyText }]);
     } catch (err: any) {
-      console.error('API Error:', err);
+      console.error('Groq API Error:', err);
       setMessages((prev) => [
         ...prev,
-        { sender: 'ai', text: `❌ Error: ${err?.message || 'Check your API key or network connection.'}` },
+        { sender: 'ai', text: `❌ Error: ${err?.message || 'Check your Groq API key or network connection.'}` },
       ]);
     } finally {
       setLoading(false);
     }
   };
 
-  // If embedded in a page tab, render directly without floating button wrapper
   if (isEmbeddedTab) {
     return renderChatBox();
   }
 
   return (
     <>
-      {/* Floating Chat Button (Bottom Right) */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
@@ -142,7 +145,6 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
         </button>
       )}
 
-      {/* Floating Chat Box Window */}
       {isOpen && renderChatBox()}
     </>
   );
@@ -154,13 +156,13 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
         {/* Header */}
         <div className="bg-slate-900 text-white p-3.5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-blue-600/30 text-blue-400 rounded-lg border border-blue-500/40">
+            <div className="p-1.5 bg-orange-600/30 text-orange-400 rounded-lg border border-orange-500/40">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-extrabold text-xs text-white">Subdivision AI Assistant</h3>
+              <h3 className="font-extrabold text-xs text-white">Groq Llama 3 Assistant</h3>
               <p className="text-[10px] text-slate-400">
-                {apiKey ? '🟢 Connected (Gemini 2.0 Flash)' : '🔴 API Key Required'}
+                {apiKey ? '🟢 Connected (Groq API)' : '🔴 API Key Required'}
               </p>
             </div>
           </div>
@@ -188,10 +190,10 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
 
         {/* API Key Configuration Overlay */}
         {showKeyInput && (
-          <form onSubmit={handleSaveKey} className="bg-blue-50 dark:bg-blue-950/80 p-3 border-b border-blue-200 dark:border-blue-900 space-y-2 text-xs">
+          <form onSubmit={handleSaveKey} className="bg-orange-50 dark:bg-orange-950/80 p-3 border-b border-orange-200 dark:border-orange-900 space-y-2 text-xs">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1">
-                <Key className="w-3.5 h-3.5" /> Enter Free Gemini API Key
+              <span className="font-bold text-orange-900 dark:text-orange-200 flex items-center gap-1">
+                <Key className="w-3.5 h-3.5" /> Enter Groq API Key
               </span>
               {apiKey && (
                 <button
@@ -199,19 +201,19 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
                   onClick={handleClearKey}
                   className="text-red-500 hover:underline text-[10px] flex items-center gap-0.5"
                 >
-                  <Trash2 className="w-3 h-3" /> Clear Key
+                  <Trash2 className="w-3.5 h-3.5" /> Clear Key
                 </button>
               )}
             </div>
             <p className="text-[10px] text-slate-500 dark:text-slate-400">
-              Get a free key instantly from <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-blue-600 underline">Google AI Studio</a>.
+              Get a free key from <a href="https://console.groq.com/" target="_blank" rel="noreferrer" className="text-orange-600 underline">Groq Console</a>.
             </p>
             <input
               type="password"
               value={tempKey}
               onChange={(e) => setTempKey(e.target.value)}
-              placeholder="Paste your free API key here..."
-              className="w-full p-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-lg text-xs text-slate-900 dark:text-white outline-none"
+              placeholder="Paste your Groq API key (gsk_...) here..."
+              className="w-full p-2 bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 rounded-lg text-xs text-slate-900 dark:text-white outline-none"
             />
             <div className="flex justify-end gap-2">
               {apiKey && (
@@ -225,7 +227,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
               )}
               <button
                 type="submit"
-                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-[10px] shadow-sm"
+                className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded font-bold text-[10px] shadow-sm"
               >
                 Save & Connect
               </button>
@@ -240,7 +242,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
               <div
                 className={`p-3 rounded-xl max-w-[85%] whitespace-pre-line leading-relaxed ${
                   m.sender === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-xs'
+                    ? 'bg-orange-600 text-white rounded-br-xs'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-bl-xs border border-slate-200 dark:border-slate-700'
                 }`}
               >
@@ -249,8 +251,8 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
             </div>
           ))}
           {loading && (
-            <div className="text-blue-600 dark:text-blue-400 text-[11px] italic animate-pulse flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 animate-spin" /> Thinking...
+            <div className="text-orange-600 dark:text-orange-400 text-[11px] italic animate-pulse flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 animate-spin" /> Groq Llama 3 is thinking...
             </div>
           )}
         </div>
@@ -261,14 +263,14 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={apiKey ? 'Ask about database or internet questions...' : 'Click ⚙️ to enter free API key'}
+            placeholder={apiKey ? 'Ask about database or general questions...' : 'Click ⚙️ to enter Groq API key'}
             disabled={!apiKey}
-            className="flex-1 p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white disabled:opacity-50"
+            className="flex-1 p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-500 text-slate-900 dark:text-white disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={!apiKey || loading}
-            className="p-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition shadow-sm"
+            className="p-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-lg transition shadow-sm"
           >
             <Send className="w-4 h-4" />
           </button>
