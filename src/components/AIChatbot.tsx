@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Sparkles, BarChart2, Database, Layers } from 'lucide-react';
+import { Send, Sparkles, Key, Settings, Trash2 } from 'lucide-react';
 
 interface AIChatbotProps {
   cases: any[];
@@ -19,107 +19,185 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
   udCases,
   ios,
   dailyReports,
+  currentRole,
+  activePS,
   isEmbeddedTab = false,
 }) => {
-  const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string; analytics?: any }>>([
+  const [apiKey, setApiKey] = useState<string>(() => {
+    return localStorage.getItem('gemini_custom_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '';
+  });
+  const [showKeyInput, setShowKeyInput] = useState<boolean>(!apiKey);
+  const [tempKey, setTempKey] = useState<string>('');
+
+  const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string }>>([
     {
       sender: 'ai',
-      text: `Jai Hind! I am your 1,000+ Permutation Feature Matrix Engine. I can dynamically evaluate hundreds of variable combinations across FIRs, IO workloads, CCTNS compliance, statutory acts, and station comparisons. Type any keyword or feature code to generate a unique response!`,
+      text: `Jai Hind! I am your live AI Assistant. I have access to your database (${cases.length} FIRs, ${ios.length} IOs) and general web knowledge. Ask me anything!`,
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // --- Dynamic 1,000+ Permutation Matrix Generator ---
-  const generatePermutationResponse = (query: string) => {
-    const q = query.toLowerCase().trim();
-
-    // Arrays of variables that combine to create thousands of unique analytical outputs
-    const stations = ['Tarapur PS', 'Asarganj PS', 'Sangrampur PS', 'Harpur PS', 'Muffassil PS', 'Kharagpur PS', 'Jamalpur PS', 'Kotwali PS', 'Haveli Kharagpur', 'Tetiyabambar PS'];
-    const crimeTypes = ['Heinous Offenses', 'Property Crimes', 'Cyber Frauds', 'NDPS Violations', 'POCSO Cases', 'Land Riots', 'Economic Offenses', 'Local Special Laws', 'Accidental Deaths', 'Missing Persons'];
-    const performanceDimensions = ['Disposal Velocity', 'Chargesheet Ratio', 'CCTNS Compliance Index', 'Pending SR Backlog', 'Warrant Execution Rate', 'Bail Tracking Index', 'Case Diary Audit Score', 'Gasti Patrol Efficiency', 'IO Caseload Index', 'Supervision Compliance'];
-    const timeframes = ['Past 7 Days', 'Past 30 Days', 'Current Quarter', 'Year-to-Date', 'Previous Month', 'Last 48 Hours', 'Festival Period', 'Inspection Cycle', 'Midnight Deployment', 'Special Drive Window'];
-
-    // Deterministic hash based on user query characters to ensure any query produces a unique matrix outcome
-    let hash = 0;
-    for (let i = 0; i < q.length; i++) {
-      hash = (hash << 5) - hash + q.charCodeAt(i);
-      hash |= 0;
-    }
-
-    const sIndex = Math.abs(hash) % stations.length;
-    const cIndex = Math.abs(hash >> 2) % crimeTypes.length;
-    const pIndex = Math.abs(hash >> 4) % performanceDimensions.length;
-    const tIndex = Math.abs(hash >> 6) % timeframes.length;
-
-    const targetStation = stations[sIndex];
-    const targetCrime = crimeTypes[cIndex];
-    const targetDimension = performanceDimensions[pIndex];
-    const targetTime = timeframes[tIndex];
-
-    // Synthetic metric derivation based on hash
-    const score = (Math.abs(hash) % 80) + 20;
-    const volume = (Math.abs(hash >> 3) % 45) + 1;
-
-    return {
-      title: `Feature Matrix Analysis: [${targetStation} — ${targetCrime}]`,
-      text: `🔍 **Multi-Dimensional Matrix Report for "${query}"**:\nEvaluated across station **${targetStation}** focusing on **${targetCrime}** during **${targetTime}**.\n\n- **Primary Analytical Metric:** ${targetDimension}\n- **Recorded Incident Volume:** ${volume} cases\n- **Calculated Performance Index:** ${score}%\n- **Operational Status:** ${score > 75 ? '🟢 Optimal Threshold' : score > 40 ? '🟡 Moderate Monitoring Required' : '🔴 Critical Backlog Alert'}`,
-      analytics: {
-        title: `Parameter Breakdown (${targetStation})`,
-        data: {
-          'Station Focus': targetStation,
-          'Crime Category': targetCrime,
-          'Time Horizon': targetTime,
-          'Active Dimension': targetDimension,
-          'Evaluated Volume': `${volume} Files`,
-          'Performance Score': `${score}%`,
-          'Total System Permutations': '10,000+ Unique Variants'
-        }
-      }
-    };
+  const handleSaveKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tempKey.trim()) return;
+    localStorage.setItem('gemini_custom_api_key', tempKey.trim());
+    setApiKey(tempKey.trim());
+    setShowKeyInput(false);
+    setTempKey('');
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleClearKey = () => {
+    localStorage.removeItem('gemini_custom_api_key');
+    setApiKey('');
+    setShowKeyInput(true);
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
 
-    const query = input.trim();
+    if (!apiKey) {
+      setShowKeyInput(true);
+      return;
+    }
+
+    const userQuery = input.trim();
     setInput('');
-    setMessages((prev) => [...prev, { sender: 'user', text: query }]);
+    setMessages((prev) => [...prev, { sender: 'user', text: userQuery }]);
     setLoading(true);
 
-    setTimeout(() => {
-      const response = generatePermutationResponse(query);
-      setMessages((prev) => [...prev, { sender: 'ai', text: response.text, analytics: response.analytics }]);
+    try {
+      // Live database summary to provide context for database questions
+      const dbContext = `
+        Database Context for Tarapur Police Subdivision:
+        - Total FIR Cases: ${cases.length}
+        - Active Investigating Officers (IOs): ${ios.length}
+        - Land Disputes: ${landDisputes.length}
+        - UD Cases: ${udCases.length}
+        - Daily Reports: ${dailyReports.length}
+        - Current User Role: ${currentRole}
+        - Active Police Station Filter: ${activePS || 'All'}
+      `;
+
+      // Free direct REST endpoint for Gemini Flash
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `You are an expert AI intelligence assistant for the Police Subdivision Portal. Use the following live database context if the user asks about internal records, or answer freely using general knowledge if they ask about anything else from the internet:\n\n${dbContext}\n\nUser Question: ${userQuery}`
+                }
+              ]
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error?.message || `API error status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
+      
+      setMessages((prev) => [...prev, { sender: 'ai', text: replyText }]);
+    } catch (err: any) {
+      console.error('API Error:', err);
+      setMessages((prev) => [
+        ...prev,
+        { sender: 'ai', text: `❌ Error: ${err?.message || 'Check your API key or network connection.'}` },
+      ]);
+    } finally {
       setLoading(false);
-    }, 300);
+    }
   };
 
   const containerStyle = isEmbeddedTab
     ? 'w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6 space-y-4'
-    : 'fixed bottom-4 right-4 z-50 w-[440px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col max-h-[650px] overflow-hidden';
+    : 'fixed bottom-4 right-4 z-50 w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col max-h-[600px] overflow-hidden';
 
   return (
     <div className={containerStyle}>
-      {/* Header */}
       <div className="bg-slate-900 text-white p-3.5 flex items-center justify-between border-b border-slate-800">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 bg-blue-600/30 text-blue-400 rounded-lg border border-blue-500/40">
-            <Database className="w-4 h-4" />
+            <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-extrabold text-xs text-white">10,000+ Permutation Matrix Engine</h3>
-            <p className="text-[10px] text-slate-400">⚡ Dynamic Multi-Feature Generator Active</p>
+            <h3 className="font-extrabold text-xs text-white">Live AI Assistant</h3>
+            <p className="text-[10px] text-slate-400">
+              {apiKey ? '🟢 Connected (Database + Internet Q&A)' : '🔴 Free API Key Required'}
+            </p>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowKeyInput(!showKeyInput)}
+          className="p-1.5 hover:bg-slate-800 text-slate-300 rounded-lg transition"
+          title="Configure API Key"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Messages Feed */}
-      <div className="flex-1 p-3.5 overflow-y-auto space-y-3 text-xs max-h-[420px]">
+      {showKeyInput && (
+        <form onSubmit={handleSaveKey} className="bg-blue-50 dark:bg-blue-950/60 p-3 border-b border-blue-200 dark:border-blue-900 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1">
+              <Key className="w-3.5 h-3.5" /> Enter Free Gemini API Key
+            </span>
+            {apiKey && (
+              <button
+                type="button"
+                onClick={handleClearKey}
+                className="text-red-500 hover:underline text-[10px] flex items-center gap-0.5"
+              >
+                <Trash2 className="w-3 h-3" /> Clear Key
+              </button>
+            )}
+          </div>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+            Get a free key instantly from <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-blue-600 underline">Google AI Studio</a>.
+          </p>
+          <input
+            type="password"
+            value={tempKey}
+            onChange={(e) => setTempKey(e.target.value)}
+            placeholder="Paste your free API key here..."
+            className="w-full p-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-lg text-xs text-slate-900 dark:text-white outline-none"
+          />
+          <div className="flex justify-end gap-2">
+            {apiKey && (
+              <button
+                type="button"
+                onClick={() => setShowKeyInput(false)}
+                className="px-2.5 py-1 bg-slate-200 dark:bg-slate-800 text-slate-700 rounded font-bold text-[10px]"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              type="submit"
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-[10px] shadow-sm"
+            >
+              Save & Connect
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="flex-1 p-3.5 overflow-y-auto space-y-3 text-xs max-h-[380px]">
         {messages.map((m, idx) => (
           <div key={idx} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
             <div
-              className={`p-3 rounded-xl max-w-[92%] whitespace-pre-line leading-relaxed ${
+              className={`p-3 rounded-xl max-w-[85%] whitespace-pre-line leading-relaxed ${
                 m.sender === 'user'
                   ? 'bg-blue-600 text-white rounded-br-xs'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-bl-xs border border-slate-200 dark:border-slate-700'
@@ -127,76 +205,28 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
             >
               {m.text}
             </div>
-
-            {/* Dynamic Feature Matrix Grid */}
-            {m.analytics && (
-              <div className="mt-2 w-full bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2">
-                <span className="font-bold text-[10px] text-blue-600 flex items-center gap-1">
-                  <Layers className="w-3.5 h-3.5" /> {m.analytics.title}
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(m.analytics.data).map(([key, val]: [string, any], i: number) => (
-                    <div key={i} className="bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-800 flex flex-col">
-                      <span className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold">{key}</span>
-                      <span className="text-xs font-black text-blue-600 dark:text-blue-400 mt-0.5">{val}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         ))}
         {loading && (
           <div className="text-blue-600 dark:text-blue-400 text-[11px] italic animate-pulse flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 animate-spin" /> Permuting matrix parameters across 10,000+ feature vectors...
+            <Sparkles className="w-3.5 h-3.5 animate-spin" /> Thinking...
           </div>
         )}
       </div>
 
-      {/* Quick Test Feature Pills */}
-      <div className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex gap-1.5 overflow-x-auto text-[10px]">
-        <button
-          type="button"
-          onClick={() => { setInput('Analyze Tarapur cyber crime velocity'); }}
-          className="px-2.5 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
-        >
-          🔍 Tarapur Cyber
-        </button>
-        <button
-          type="button"
-          onClick={() => { setInput('Evaluate Asarganj POCSO backlog'); }}
-          className="px-2.5 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
-        >
-          📊 Asarganj POCSO
-        </button>
-        <button
-          type="button"
-          onClick={() => { setInput('Audit Sangrampur NDPS disposal rate'); }}
-          className="px-2.5 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
-        >
-          📈 Sangrampur NDPS
-        </button>
-        <button
-          type="button"
-          onClick={() => { setInput('Check Harpur property crime warrants'); }}
-          className="px-2.5 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded font-bold whitespace-nowrap transition"
-        >
-          ⚖️ Harpur Property
-        </button>
-      </div>
-
-      {/* Input Form */}
       <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-200 dark:border-slate-800 flex gap-2">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type any custom query for a unique response..."
-          className="flex-1 p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white"
+          placeholder={apiKey ? 'Ask about database or general internet questions...' : 'Click ⚙️ to enter free API key'}
+          disabled={!apiKey}
+          className="flex-1 p-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white disabled:opacity-50"
         />
         <button
           type="submit"
-          className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition shadow-sm"
+          disabled={!apiKey || loading}
+          className="p-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition shadow-sm"
         >
           <Send className="w-4 h-4" />
         </button>
