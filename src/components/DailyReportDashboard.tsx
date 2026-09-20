@@ -39,13 +39,13 @@ import {
 import { calculateArrivalDate, formatIndianDate, getLeaveArrivalStatus, normalizeLeaveType } from '../utils/helpers';
 
 interface DailyReportDashboardProps {
-  reports: DailyCrimeReport[];
-  cases: FIRCase[];
-  ios: InvestigatingOfficer[];
+  reports?: DailyCrimeReport[];
+  cases?: FIRCase[];
+  ios?: InvestigatingOfficer[];
   currentRole: UserRole;
   activePS?: PoliceStationName | null;
-  monthlyArrestOverrides: Record<string, number>;
-  onUpdateMonthlyArrestOverride: (monthKey: string, ps: string, figure: number) => void;
+  monthlyArrestOverrides?: Record<string, number>;
+  onUpdateMonthlyArrestOverride?: (monthKey: string, ps: string, figure: number) => void;
   leaveLedger?: LeaveLedgerEntry[];
   onUpdateLeaveStatus?: (leaveId: string, status: 'ON_LEAVE' | 'ARRIVED' | 'OVERDUE', actualArrivalDate?: string) => void;
   onAddLeaveEntry?: (entry: LeaveLedgerEntry) => void;
@@ -56,12 +56,12 @@ interface DailyReportDashboardProps {
 const ALL_PS: PoliceStationName[] = ['Tarapur', 'Asarganj', 'Sangrampur', 'Harpur'];
 
 export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
-  reports,
-  cases,
-  ios,
+  reports = [],
+  cases = [],
+  ios = [],
   currentRole,
   activePS,
-  monthlyArrestOverrides,
+  monthlyArrestOverrides = {},
   onUpdateMonthlyArrestOverride,
   leaveLedger = [],
   onUpdateLeaveStatus,
@@ -71,25 +71,21 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
 }) => {
   const isSuperUser = currentRole === 'SDPO';
   const todayStr = new Date().toISOString().split('T')[0];
-  const currentMonthKey = todayStr.slice(0, 7); // e.g. "2025-05"
+  const currentMonthKey = todayStr.slice(0, 7);
 
-  // View state: Subdivision Level or PS Level
   const [viewLevel, setViewLevel] = useState<'subdivision' | 'ps'>(
     activePS ? 'ps' : 'subdivision'
   );
   const [selectedPS, setSelectedPS] = useState<PoliceStationName>(activePS || 'Tarapur');
 
-  // Modal / prompt for Super User to override monthly arresting figure
   const [isEditingArrests, setIsEditingArrests] = useState(false);
   const [customArrestInput, setCustomArrestInput] = useState<string>('');
 
-  // Leave Ledger filters & search state
   const [leaveTab, setLeaveTab] = useState<'ALL_ACTIVE' | 'ARRIVING_TODAY' | 'UPCOMING' | 'OVERDUE' | 'ALL'>('ALL_ACTIVE');
   const [leaveSearch, setLeaveSearch] = useState('');
   const [leaveRankFilter, setLeaveRankFilter] = useState<'ALL' | OfficerLeaveRank>('ALL');
   const [leaveTypeFilter, setLeaveTypeFilter] = useState<'ALL' | OfficerLeaveType>('ALL');
 
-  // Quick Add Leave Modal State
   const [isAddLeaveModalOpen, setIsAddLeaveModalOpen] = useState(false);
   const [newLeavePS, setNewLeavePS] = useState<PoliceStationName>(activePS || 'Tarapur');
   const [newLeaveOfficerName, setNewLeaveOfficerName] = useState('');
@@ -99,28 +95,28 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
   const [newLeaveType, setNewLeaveType] = useState<OfficerLeaveType>('CL');
   const [newLeaveRemarks, setNewLeaveRemarks] = useState('');
 
-  // Determine current context PS filter (null means all subdivision)
   const contextPS = viewLevel === 'subdivision' ? null : selectedPS;
 
-  // Filtered reports
-  const relevantReports = useMemo(() => {
-    return contextPS ? reports.filter((r) => r.ps === contextPS) : reports;
-  }, [reports, contextPS]);
+  const safeReports = Array.isArray(reports) ? reports : [];
+  const safeCases = Array.isArray(cases) ? cases : [];
+  const safeIos = Array.isArray(ios) ? ios : [];
+  const safeLeaveLedger = Array.isArray(leaveLedger) ? leaveLedger : [];
 
-  // Combined Leave Ledger Entries (from active ledger + all daily reports)
+  const relevantReports = useMemo(() => {
+    return contextPS ? safeReports.filter((r) => r && r.ps === contextPS) : safeReports;
+  }, [safeReports, contextPS]);
+
   const allLeaveEntries = useMemo(() => {
     const map = new Map<string, LeaveLedgerEntry>();
 
-    // 1. External ledger
-    if (leaveLedger) {
-      leaveLedger.forEach((entry) => map.set(entry.id, entry));
-    }
+    safeLeaveLedger.forEach((entry) => {
+      if (entry && entry.id) map.set(entry.id, entry);
+    });
 
-    // 2. From all daily reports
-    reports.forEach((report) => {
-      if (report.leaveLedgerEntries) {
+    safeReports.forEach((report) => {
+      if (report && Array.isArray(report.leaveLedgerEntries)) {
         report.leaveLedgerEntries.forEach((entry) => {
-          if (!map.has(entry.id)) {
+          if (entry && entry.id && !map.has(entry.id)) {
             map.set(entry.id, entry);
           }
         });
@@ -128,25 +124,22 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
     });
 
     const list = Array.from(map.values());
+    const stationFiltered = contextPS ? list.filter((e) => e && e.ps === contextPS) : list;
 
-    // Filter by contextPS
-    const stationFiltered = contextPS ? list.filter((e) => e.ps === contextPS) : list;
+    return stationFiltered.sort((a, b) => (a?.arrivalDate || '').localeCompare(b?.arrivalDate || ''));
+  }, [safeLeaveLedger, safeReports, contextPS]);
 
-    // Sort by arrival date ascending
-    return stationFiltered.sort((a, b) => a.arrivalDate.localeCompare(b.arrivalDate));
-  }, [leaveLedger, reports, contextPS]);
-
-  // Derived Leave Metrics
   const activeLeaves = useMemo(() => {
-    return allLeaveEntries.filter((e) => e.status !== 'ARRIVED');
+    return allLeaveEntries.filter((e) => e && e.status !== 'ARRIVED');
   }, [allLeaveEntries]);
 
   const arrivingTodayEntries = useMemo(() => {
-    return activeLeaves.filter((e) => e.arrivalDate === todayStr);
+    return activeLeaves.filter((e) => e && e.arrivalDate === todayStr);
   }, [activeLeaves, todayStr]);
 
   const arrivingTomorrowEntries = useMemo(() => {
     return activeLeaves.filter((e) => {
+      if (!e) return false;
       const status = getLeaveArrivalStatus(e.arrivalDate, e.status, todayStr);
       return status.diffDays === 1;
     });
@@ -154,32 +147,29 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
 
   const overdueEntries = useMemo(() => {
     return activeLeaves.filter((e) => {
+      if (!e) return false;
       const status = getLeaveArrivalStatus(e.arrivalDate, e.status, todayStr);
       return status.code === 'OVERDUE';
     });
   }, [activeLeaves, todayStr]);
 
-  // Displayed Leave entries filtered by tabs, ranks, and search
   const displayedLeaveEntries = useMemo(() => {
     return allLeaveEntries.filter((item) => {
+      if (!item) return false;
       const statusInfo = getLeaveArrivalStatus(item.arrivalDate, item.status, todayStr);
 
-      // Tab filter
       if (leaveTab === 'ALL_ACTIVE' && item.status === 'ARRIVED') return false;
       if (leaveTab === 'ARRIVING_TODAY' && statusInfo.code !== 'ARRIVING_TODAY') return false;
       if (leaveTab === 'UPCOMING' && (statusInfo.diffDays <= 0 || statusInfo.diffDays > 3 || item.status === 'ARRIVED')) return false;
       if (leaveTab === 'OVERDUE' && statusInfo.code !== 'OVERDUE') return false;
 
-      // Rank filter
       if (leaveRankFilter !== 'ALL' && item.rank !== leaveRankFilter) return false;
 
-      // Leave Type filter (CL, CPL, OTHERS)
       if (leaveTypeFilter !== 'ALL') {
         const norm = normalizeLeaveType(item.leaveType);
         if (norm !== leaveTypeFilter) return false;
       }
 
-      // Search query
       if (leaveSearch.trim()) {
         const q = leaveSearch.toLowerCase().trim();
         const matchName = (item.officerName || '').toLowerCase().includes(q);
@@ -194,10 +184,9 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
     });
   }, [allLeaveEntries, leaveTab, leaveRankFilter, leaveTypeFilter, leaveSearch, todayStr]);
 
-  // Available officers for Quick Leave Entry Modal
   const newLeaveAvailableOfficers = useMemo(() => {
-    return ios.filter((io) => io.ps === newLeavePS);
-  }, [ios, newLeavePS]);
+    return safeIos.filter((io) => io && io.ps === newLeavePS);
+  }, [safeIos, newLeavePS]);
 
   const handleSaveQuickLeave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,20 +217,15 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
     setNewLeaveRemarks('');
   };
 
-  // Today's reports
   const todayReports = useMemo(() => {
-    return relevantReports.filter((r) => r.date === todayStr);
+    return relevantReports.filter((r) => r && (r.date || '') === todayStr);
   }, [relevantReports, todayStr]);
 
-  // Monthly reports
- const currentMonthReports = useMemo(() => {
-    return relevantReports.filter((r) => (r?.date || '').startsWith(currentMonthKey));
+  const currentMonthReports = useMemo(() => {
+    return relevantReports.filter((r) => r && (r.date || '').startsWith(currentMonthKey));
   }, [relevantReports, currentMonthKey]);
 
-  // 1. Force Strength Aggregation (Rank-wise)
   const rankStrengthSummary = useMemo(() => {
-    // If a specific PS is selected, take the latest reported rankStrengths for that PS, or fallback to default
-    // If subdivision level, aggregate latest report of each of the 4 PS!
     const defaultRanks: Record<
       RankStrengthDetails['rank'],
       { total: number; present: number; onLeave: number; arriving: number; departing: number }
@@ -255,23 +239,21 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
     const targetStations = contextPS ? [contextPS] : ALL_PS;
 
     targetStations.forEach((station) => {
-      // Find latest report for this station that contains rankStrengths
-      const stationReport = reports
-        .filter((r) => r.ps === station && r.rankStrengths && r.rankStrengths.length > 0)
-        .sort((a, b) => b.date.localeCompare(a.date))[0];
+      const stationReport = safeReports
+        .filter((r) => r && r.ps === station && Array.isArray(r.rankStrengths) && r.rankStrengths.length > 0)
+        .sort((a, b) => (b?.date || '').localeCompare(a?.date || ''))[0];
 
       if (stationReport && stationReport.rankStrengths) {
         stationReport.rankStrengths.forEach((rs) => {
-          if (defaultRanks[rs.rank]) {
-            defaultRanks[rs.rank].total += rs.totalStrength;
-            defaultRanks[rs.rank].present += rs.present;
-            defaultRanks[rs.rank].onLeave += rs.onLeave;
+          if (rs && defaultRanks[rs.rank]) {
+            defaultRanks[rs.rank].total += rs.totalStrength || 0;
+            defaultRanks[rs.rank].present += rs.present || 0;
+            defaultRanks[rs.rank].onLeave += rs.onLeave || 0;
             defaultRanks[rs.rank].arriving += rs.arrivingToday || 0;
             defaultRanks[rs.rank].departing += rs.departingToday || 0;
           }
         });
       } else {
-        // Fallback default estimates per station if not yet logged today
         defaultRanks.Inspector.total += 1;
         defaultRanks.Inspector.present += 1;
         defaultRanks['Sub-Inspector (SI)'].total += 6;
@@ -287,74 +269,65 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
     });
 
     return defaultRanks;
-  }, [reports, contextPS]);
+  }, [safeReports, contextPS]);
 
-  // 2. Total FIR registered today
   const totalFIRToday = useMemo(() => {
-    // FIRs from today's submitted daily reports
-    const fromReports = todayReports.reduce((acc, r) => acc + (r.firsRegisteredCount || 0), 0);
-    // FIRs from main FIR case records created today
-    const fromFIRRecords = cases.filter((c) => {
+    const fromReports = todayReports.reduce((acc, r) => acc + (r?.firsRegisteredCount || 0), 0);
+    const fromFIRRecords = safeCases.filter((c) => {
+      if (!c) return false;
       if (contextPS && c.ps !== contextPS) return false;
-      return c.firDate === todayStr;
+      return (c.firDate || '') === todayStr;
     }).length;
 
     return Math.max(fromReports, fromFIRRecords);
-  }, [todayReports, cases, todayStr, contextPS]);
+  }, [todayReports, safeCases, todayStr, contextPS]);
 
-  // 3. Total FIR registered in month (From FIR records database!)
- const totalFIRInMonth = useMemo(() => {
-    return cases.filter((c) => {
-      if (contextPS && c?.ps !== contextPS) return false;
-      return (c?.firDate || '').startsWith(currentMonthKey);
-    }).length;
-  }, [cases, currentMonthKey, contextPS]);
-
-  // Monthly FIR breakdown
-  const monthlyFIRBreakdown = useMemo(() => {
-    const monthCases = cases.filter((c) => {
+  const totalFIRInMonth = useMemo(() => {
+    return safeCases.filter((c) => {
+      if (!c) return false;
       if (contextPS && c.ps !== contextPS) return false;
-      return c.firDate.startsWith(currentMonthKey);
-    });
-    const srCount = monthCases.filter((c) => c.designation === 'SR').length;
-    const nonSrCount = monthCases.filter((c) => c.designation === 'NON_SR').length;
-    const punishment7Plus = monthCases.filter((c) => c.punishmentTerm === '7_years_or_more').length;
-    const punishment7Less = monthCases.filter((c) => c.punishmentTerm === 'less_than_7_years').length;
-    return { srCount, nonSrCount, punishment7Plus, punishment7Less };
-  }, [cases, currentMonthKey, contextPS]);
+      return (c.firDate || '').startsWith(currentMonthKey);
+    }).length;
+  }, [safeCases, currentMonthKey, contextPS]);
 
-  // 4. Total Arresting Today
+  const monthlyFIRBreakdown = useMemo(() => {
+    const monthCases = safeCases.filter((c) => {
+      if (!c) return false;
+      if (contextPS && c.ps !== contextPS) return false;
+      return (c.firDate || '').startsWith(currentMonthKey);
+    });
+    const srCount = monthCases.filter((c) => c && c.designation === 'SR').length;
+    const nonSrCount = monthCases.filter((c) => c && c.designation === 'NON_SR').length;
+    const punishment7Plus = monthCases.filter((c) => c && c.punishmentTerm === '7_years_or_more').length;
+    const punishment7Less = monthCases.filter((c) => c && c.punishmentTerm === 'less_than_7_years').length;
+    return { srCount, nonSrCount, punishment7Plus, punishment7Less };
+  }, [safeCases, currentMonthKey, contextPS]);
+
   const totalArrestingToday = useMemo(() => {
-    return todayReports.reduce((acc, r) => acc + (r.arrestsCount || 0), 0);
+    return todayReports.reduce((acc, r) => acc + (r?.arrestsCount || 0), 0);
   }, [todayReports]);
 
-  // Today's Liquor arrests
   const todayLiquorArrests = useMemo(() => {
     return todayReports.reduce((acc, r) => {
-      if (r.arrestDetails?.liquorArrestsCount !== undefined) {
+      if (r && r.arrestDetails && r.arrestDetails.liquorArrestsCount !== undefined) {
         return acc + r.arrestDetails.liquorArrestsCount;
       }
       return acc;
     }, 0);
   }, [todayReports]);
 
-  // 5. Total Arresting in Month (Aggregated from reports + FIR records + Super User override)
   const computedMonthlyArrests = useMemo(() => {
-    // Sum from monthly daily reports
-    const reportArrests = currentMonthReports.reduce((acc, r) => acc + (r.arrestsCount || 0), 0);
-    return reportArrests;
+    return currentMonthReports.reduce((acc, r) => acc + (r?.arrestsCount || 0), 0);
   }, [currentMonthReports]);
 
-  // Check if Superuser has an override for this month & scope
   const overrideKey = `${currentMonthKey}_${contextPS || 'ALL'}`;
   const overriddenFigure = monthlyArrestOverrides[overrideKey];
   const finalMonthlyArrests =
     overriddenFigure !== undefined ? overriddenFigure : computedMonthlyArrests;
 
-  // Handle saving Superuser arrest override
   const handleSaveArrestOverride = () => {
     const val = parseInt(customArrestInput, 10);
-    if (!isNaN(val) && val >= 0) {
+    if (!isNaN(val) && val >= 0 && onUpdateMonthlyArrestOverride) {
       onUpdateMonthlyArrestOverride(currentMonthKey, contextPS || 'ALL', val);
       setIsEditingArrests(false);
     }
@@ -362,7 +335,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top View Selector Bar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-lg border border-blue-200 dark:border-blue-900">
@@ -378,7 +350,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
         </div>
 
-        {/* Level Toggle & PS selector */}
         <div className="flex items-center gap-2">
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
             <button
@@ -421,9 +392,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
         </div>
       </div>
 
-      {/* Primary KPI Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1: Total FIR Registered Today */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
@@ -447,7 +416,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
         </div>
 
-        {/* Metric 2: Total FIR Registered in Month (from FIR records) */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
@@ -469,7 +437,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
         </div>
 
-        {/* Metric 3: Total Arresting Today */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
@@ -494,7 +461,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
         </div>
 
-        {/* Metric 4: Total Arresting in Month (with Super User Edit Option) */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
@@ -534,7 +500,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
         </div>
       </div>
 
-      {/* Force Strength Breakdown Table & Card (Rank-Wise) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2.5">
@@ -571,7 +536,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {(Object.keys(rankStrengthSummary) as RankStrengthDetails['rank'][]).map((rank) => {
-                const item = rankStrengthSummary[rank];
+                const item = rankStrengthSummary[rank] || { total: 0, present: 0, onLeave: 0, arriving: 0, departing: 0 };
                 const isConstable = rank === 'Constable';
                 const effectiveAvailable = item.present;
                 const availabilityRate = item.total > 0 ? Math.round((effectiveAvailable / item.total) * 100) : 100;
@@ -615,9 +580,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
         </div>
       </div>
 
-      {/* Officer Leave Ledger & Expected Arrival Schedule (Except Constable) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-4">
-        {/* Section Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded-lg border border-amber-200/60 dark:border-amber-900/60">
@@ -652,7 +615,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
         </div>
 
-        {/* 4 Summary Stat Metric Pills */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
@@ -725,7 +687,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
         </div>
 
-        {/* Filter Tabs & Search Controls */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 pt-1">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
             <button
@@ -783,7 +744,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            {/* Rank Filter */}
             <select
               value={leaveRankFilter}
               onChange={(e) => setLeaveRankFilter(e.target.value as any)}
@@ -795,7 +755,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
               <option value="ASI & PTC">ASI & PTC</option>
             </select>
 
-            {/* Leave Type Filter (CL, CPL, OTHERS) */}
             <select
               value={leaveTypeFilter}
               onChange={(e) => setLeaveTypeFilter(e.target.value as any)}
@@ -807,7 +766,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
               <option value="OTHERS">OTHERS</option>
             </select>
 
-            {/* Search Input */}
             <div className="relative flex-1 sm:w-48">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -821,7 +779,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
         </div>
 
-        {/* Leave Ledger Table */}
         <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -845,6 +802,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                 </tr>
               ) : (
                 displayedLeaveEntries.map((item) => {
+                  if (!item) return null;
                   const statusInfo = getLeaveArrivalStatus(item.arrivalDate, item.status, todayStr);
                   const isTodayArrival = statusInfo.code === 'ARRIVING_TODAY';
                   const departureFormatted = formatIndianDate(item.departureDate);
@@ -859,7 +817,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                           : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40'
                       }`}
                     >
-                      {/* Officer Name & Rank */}
                       <td className="py-3 px-3">
                         <div className="font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
                           <span>{item.officerName}</span>
@@ -872,14 +829,12 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                         </span>
                       </td>
 
-                      {/* Police Station */}
                       <td className="py-3 px-2.5 font-bold text-slate-700 dark:text-slate-300">
                         <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800 text-[11px]">
                           {item.ps} PS
                         </span>
                       </td>
 
-                      {/* Departure Date */}
                       <td className="py-3 px-2.5 font-medium text-slate-700 dark:text-slate-300">
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -887,14 +842,12 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                         </div>
                       </td>
 
-                      {/* Duration */}
                       <td className="py-3 px-2 text-center">
                         <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold rounded text-[11px] border border-amber-200 dark:border-amber-800">
                           {item.daysOnLeave} Days
                         </span>
                       </td>
 
-                      {/* Expected Arrival Date (Prominent!) */}
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-1.5">
                           <Clock4 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -909,7 +862,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                         </div>
                       </td>
 
-                      {/* Timeline Status */}
                       <td className="py-3 px-3">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] border ${statusInfo.badgeClass}`}>
                           {statusInfo.code === 'OVERDUE' && <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />}
@@ -918,7 +870,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                         </span>
                       </td>
 
-                      {/* Type & Remarks */}
                       <td className="py-3 px-3">
                         {(() => {
                           const normType = normalizeLeaveType(item.leaveType);
@@ -941,7 +892,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                         )}
                       </td>
 
-                      {/* Actions */}
                       <td className="py-3 px-3 text-right">
                         {!isReadOnly ? (
                           <div className="flex items-center justify-end gap-1.5">
@@ -996,8 +946,8 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </table>
         </div>
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Officer on Duty (OD1, OD2, OD3) Highlights */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 shadow-xs space-y-3">
           <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
             <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -1008,7 +958,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
 
           <div className="space-y-2 text-xs">
             {(contextPS ? [contextPS] : ALL_PS).map((ps) => {
-              const rep = todayReports.find((r) => r.ps === ps);
+              const rep = todayReports.find((r) => r && r.ps === ps);
               const od = rep?.odDetails;
 
               return (
@@ -1036,7 +986,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
           </div>
         </div>
 
-        {/* GASTI (Patrol) Shifts Highlights */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4.5 shadow-xs space-y-3">
           <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
             <Car className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -1047,7 +996,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
 
           <div className="space-y-2 text-xs">
             {(contextPS ? [contextPS] : ALL_PS).map((ps) => {
-              const rep = todayReports.find((r) => r.ps === ps);
+              const rep = todayReports.find((r) => r && r.ps === ps);
               const gasti = rep?.gastiDetails;
 
               return (
@@ -1076,7 +1025,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
         </div>
       </div>
 
-      {/* Super User Edit Monthly Arrest Override Modal */}
       {isEditingArrests && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 max-w-md w-full shadow-2xl space-y-4 text-xs">
@@ -1134,7 +1082,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
         </div>
       )}
 
-      {/* Quick Record Officer Leave Modal */}
       {isAddLeaveModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
@@ -1156,7 +1103,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
             </div>
 
             <form onSubmit={handleSaveQuickLeave} className="p-5 space-y-4">
-              {/* Police Station */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Police Station:
@@ -1178,7 +1124,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                 </select>
               </div>
 
-              {/* Officer Selection & Rank */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -1190,7 +1135,7 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                       onChange={(e) => {
                         const name = e.target.value;
                         setNewLeaveOfficerName(name);
-                        const matchedIO = newLeaveAvailableOfficers.find((o) => o.name === name);
+                        const matchedIO = newLeaveAvailableOfficers.find((o) => o && o.name === name);
                         if (matchedIO) {
                           if (matchedIO.rank === 'Inspector') setNewLeaveRank('Inspector');
                           else if (matchedIO.rank === 'Sub-Inspector (SI)') setNewLeaveRank('Sub-Inspector (SI)');
@@ -1235,7 +1180,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Departure Date & Days on Leave */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -1266,7 +1210,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Dynamic Auto-Computed Arrival Banner */}
               {newLeaveDepartureDate && newLeaveDays > 0 && (
                 <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 rounded-xl space-y-1">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
@@ -1287,7 +1230,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                 </div>
               )}
 
-              {/* Leave Type & Remarks */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -1318,7 +1260,6 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Modal Actions */}
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
