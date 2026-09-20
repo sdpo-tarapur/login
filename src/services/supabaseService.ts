@@ -280,8 +280,10 @@ export async function saveUserAccountToSupabase(account: any): Promise<boolean> 
   if (!client) return false;
   try {
     const { error } = await client.from('user_accounts').upsert([account]).select();
+    if (error) console.error('Save user account error:', error.message);
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Save user account exception:', err);
     return false;
   }
 }
@@ -353,8 +355,10 @@ export async function saveFIRCaseToSupabase(firCase: any): Promise<boolean> {
   if (!client) return false;
   try {
     const { error } = await client.from('fir_cases').upsert([firCase]).select();
+    if (error) console.error('Save FIR case error:', error.message);
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Save FIR case exception:', err);
     return false;
   }
 }
@@ -379,9 +383,13 @@ export async function fetchIOsFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('investigating_officers').select('*');
-    if (error) return null;
+    if (error) {
+      console.warn('Error fetching IOs:', error.message);
+      return null;
+    }
     return data || [];
-  } catch {
+  } catch (err) {
+    console.warn('Exception fetching IOs:', err);
     return null;
   }
 }
@@ -391,8 +399,10 @@ export async function saveIOToSupabase(io: any): Promise<boolean> {
   if (!client) return false;
   try {
     const { error } = await client.from('investigating_officers').upsert([io]).select();
+    if (error) console.error('Save IO error:', error.message);
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Save IO exception:', err);
     return false;
   }
 }
@@ -417,9 +427,13 @@ export async function fetchLeaveLedgerFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('leave_ledger').select('*');
-    if (error) return null;
+    if (error) {
+      console.warn('Error fetching leave ledger:', error.message);
+      return null;
+    }
     return data || [];
-  } catch {
+  } catch (err) {
+    console.warn('Exception fetching leave ledger:', err);
     return null;
   }
 }
@@ -429,8 +443,10 @@ export async function saveLeaveLedgerEntryToSupabase(entry: any): Promise<boolea
   if (!client) return false;
   try {
     const { error } = await client.from('leave_ledger').upsert([entry]).select();
+    if (error) console.error('Save leave error:', error.message);
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Save leave exception:', err);
     return false;
   }
 }
@@ -455,9 +471,13 @@ export async function fetchLandDisputesFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('land_disputes').select('*');
-    if (error) return null;
+    if (error) {
+      console.warn('Error fetching land disputes:', error.message);
+      return null;
+    }
     return data || [];
-  } catch {
+  } catch (err) {
+    console.warn('Exception fetching land disputes:', err);
     return null;
   }
 }
@@ -467,8 +487,10 @@ export async function saveLandDisputeToSupabase(dispute: any): Promise<boolean> 
   if (!client) return false;
   try {
     const { error } = await client.from('land_disputes').upsert([dispute]).select();
+    if (error) console.error('Save land dispute error:', error.message);
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Save land dispute exception:', err);
     return false;
   }
 }
@@ -493,9 +515,13 @@ export async function fetchUDCasesFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('ud_cases').select('*');
-    if (error) return null;
+    if (error) {
+      console.warn('Error fetching UD cases:', error.message);
+      return null;
+    }
     return data || [];
-  } catch {
+  } catch (err) {
+    console.warn('Exception fetching UD cases:', err);
     return null;
   }
 }
@@ -505,8 +531,10 @@ export async function saveUDCaseToSupabase(udCase: any): Promise<boolean> {
   if (!client) return false;
   try {
     const { error } = await client.from('ud_cases').upsert([udCase]).select();
+    if (error) console.error('Save UD case error:', error.message);
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Save UD case exception:', err);
     return false;
   }
 }
@@ -531,9 +559,13 @@ export async function fetchDailyReportsFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('daily_crime_reports').select('*');
-    if (error) return null;
+    if (error) {
+      console.warn('Error fetching daily reports:', error.message);
+      return null;
+    }
     return data || [];
-  } catch {
+  } catch (err) {
+    console.warn('Exception fetching daily reports:', err);
     return null;
   }
 }
@@ -543,8 +575,10 @@ export async function saveDailyReportToSupabase(report: any): Promise<boolean> {
   if (!client) return false;
   try {
     const { error } = await client.from('daily_crime_reports').upsert([report]).select();
+    if (error) console.error('Save daily report error:', error.message);
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Save daily report exception:', err);
     return false;
   }
 }
@@ -569,9 +603,13 @@ export async function fetchUserMessagesFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('user_messages').select('*');
-    if (error) return null;
+    if (error) {
+      console.warn('Error fetching user messages:', error.message);
+      return null;
+    }
     return data || [];
-  } catch {
+  } catch (err) {
+    console.warn('Exception fetching user messages:', err);
     return null;
   }
 }
@@ -581,8 +619,10 @@ export async function saveUserMessageToSupabase(msg: any): Promise<boolean> {
   if (!client) return false;
   try {
     const { error } = await client.from('user_messages').upsert([msg]).select();
+    if (error) console.error('Save message error:', error.message);
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Save message exception:', err);
     return false;
   }
 }
@@ -639,8 +679,10 @@ export async function saveMonthlyArrestOverrideToSupabase(
     const { error } = await client.from('monthly_arrest_adjustments').upsert([payload], {
       onConflict: 'month_key,ps',
     }).select();
+    if (error) console.error('Save arrest override error:', error.message);
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Save arrest override exception:', err);
     return false;
   }
 }
