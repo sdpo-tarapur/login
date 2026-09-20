@@ -1,29 +1,39 @@
 import React, { useState } from 'react';
 import { UserAccount } from '../types';
-import { Shield, Lock, User, Key, AlertCircle, Eye, EyeOff, Database, CheckCircle2 } from 'lucide-react';
+import { Shield, Lock, User, Key, AlertCircle, Eye, EyeOff, Database, CheckCircle2, RefreshCw } from 'lucide-react';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { authenticateOfficerWithSupabase } from '../services/supabaseService';
 
 interface LoginModalProps {
   isOpen: boolean;
   accounts: UserAccount[];
   onLoginSuccess: (userAccount: UserAccount) => void;
+  onResetAccounts?: () => void;
+  onOpenSupabaseConfig?: () => void;
 }
 
-export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, accounts, onLoginSuccess }) => {
+export const LoginModal: React.FC<LoginModalProps> = ({
+  isOpen,
+  accounts,
+  onLoginSuccess,
+  onResetAccounts,
+  onOpenSupabaseConfig,
+}) => {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
 
   const supabaseConnected = isSupabaseConfigured();
 
-  const handleLogin = (e?: React.FormEvent) => {
+  const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setErrorMessage('');
 
-    const cleanUser = userId.trim().toLowerCase();
+    const cleanUser = userId.trim();
     const cleanPass = password.trim();
 
     if (!cleanUser || !cleanPass) {
@@ -31,15 +41,35 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, accounts, onLogi
       return;
     }
 
-    // Match against active accounts
-    const match = accounts.find(
-      (acc) => acc.userId.toLowerCase() === cleanUser && acc.password === cleanPass && acc.isActive
-    );
+    setIsLoading(true);
 
-    if (match) {
-      onLoginSuccess(match);
-    } else {
-      setErrorMessage('Invalid User ID or Password. Please check your officer credentials.');
+    try {
+      // 1. If Supabase is configured, authenticate directly against the cloud database
+      if (supabaseConnected) {
+        const result = await authenticateOfficerWithSupabase(cleanUser, cleanPass);
+        if (result.success && result.account) {
+          onLoginSuccess(result.account);
+          return;
+        }
+      }
+
+      // 2. Fallback to local accounts array (case-insensitive User ID check)
+      const match = accounts.find(
+        (acc) =>
+          acc.userId.toLowerCase() === cleanUser.toLowerCase() &&
+          acc.password === cleanPass &&
+          acc.isActive
+      );
+
+      if (match) {
+        onLoginSuccess(match);
+      } else {
+        setErrorMessage('Invalid User ID or Password. Please check your officer credentials.');
+      }
+    } catch (err: any) {
+      setErrorMessage(`Authentication failed: ${err?.message || 'Network error'}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -72,10 +102,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, accounts, onLogi
               </span>
             ) : (
               <span className="text-amber-300">
-                Local Storage Mode (Configure VITE_SUPABASE_URL for Cloud Sync)
+                Local Storage Mode
               </span>
             )}
           </div>
+
+          {onOpenSupabaseConfig && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={onOpenSupabaseConfig}
+                className="text-[10px] text-indigo-300 hover:text-white underline font-bold"
+              >
+                Configure Cloud Database Settings
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Login Form Body */}
@@ -98,7 +140,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, accounts, onLogi
                   type="text"
                   value={userId}
                   onChange={(e) => setUserId(e.target.value)}
-                  placeholder="Enter User ID (e.g. sdpo.tarapur, sho.tarapur)"
+                  placeholder="Enter User ID"
                   required
                   className="w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
                 />
@@ -131,10 +173,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, accounts, onLogi
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs py-3 rounded-xl transition shadow-md flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer"
+              disabled={isLoading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-extrabold text-xs py-3 rounded-xl transition shadow-md flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer"
             >
-              <Lock className="w-4 h-4" />
-              <span>Authenticate & Access Portal</span>
+              {isLoading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Lock className="w-4 h-4" />
+              )}
+              <span>{isLoading ? 'Verifying with Database...' : 'Authenticate & Access Portal'}</span>
             </button>
           </form>
 
