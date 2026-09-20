@@ -257,7 +257,11 @@ export default function App() {
         // Merge with initial accounts to ensure nobody is lost
         const mergedMap = new Map<string, UserAccount>();
         INITIAL_USER_ACCOUNTS.forEach((a) => mergedMap.set(a.userId.toLowerCase(), a));
-        accounts.forEach((a) => mergedMap.set(a.userId.toLowerCase(), a));
+        accounts.forEach((a) => {
+          if (a?.userId) {
+            mergedMap.set(a.userId.toLowerCase(), a);
+          }
+        });
         setUserAccounts(Array.from(mergedMap.values()));
       }
       if (firList && firList.length > 0) setCases(firList);
@@ -386,10 +390,7 @@ export default function App() {
   // Permission levels check
   const isViewer = currentUserAccount?.permissionLevel === 'VIEWER';
   const isOperator = currentUserAccount?.permissionLevel === 'OPERATOR';
-  // Operator is like viewer for FIRs, UD, IOs, Land Disputes
   const isReadOnly = isViewer || isOperator;
-  // Operator CAN add to daily reports, only VIEWER is read-only for daily reports
-  const isDailyReportReadOnly = isViewer;
 
   // Handlers for FIRs
   const handleCreateFIR = (newCaseData: Omit<FIRCase, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -425,7 +426,6 @@ export default function App() {
     const targetCase = cases.find((c) => c.id === caseId);
     if (!targetCase) return;
 
-    // Permissions check: Superuser (SDPO) can delete anything. PS can delete their cases. CI can delete NON-SR cases.
     const isSuperUser = currentRole === 'SDPO';
     const isOwnPS = activePS && targetCase.ps === activePS;
     const isCI = currentRole === 'CI';
@@ -665,7 +665,6 @@ export default function App() {
     setDailyReports((prev) => [newReport, ...prev]);
     saveDailyReportToSupabase(newReport);
 
-    // Auto-sync newly recorded departing officers to leave ledger
     if (newReport.leaveLedgerEntries && newReport.leaveLedgerEntries.length > 0) {
       setLeaveLedger((prev) => {
         const existingIds = new Set(prev.map((l) => l.id));
@@ -796,13 +795,16 @@ export default function App() {
     );
   };
 
-  // Calculate filtered FIR cases
+  // Safe Filtered FIR cases with null-coalescing string protection
   const visibleCases = cases.filter((c) => {
-    // Role-based PS restriction
-    if (activePS && c.ps !== activePS) return false;
+    if (!c) return false;
 
-    // Filters
-    if (filters.policeStations && filters.policeStations.length > 0 && !filters.policeStations.includes(c.ps)) {
+    // Role-based PS restriction
+    const cPs = c?.ps || '';
+    if (activePS && cPs !== activePS) return false;
+
+    // Filters with safe string/array checks
+    if (filters.policeStations && filters.policeStations.length > 0 && !filters.policeStations.includes(cPs)) {
       return false;
     }
     if (filters.designations && filters.designations.length > 0 && !filters.designations.includes(c.designation)) {
@@ -843,7 +845,7 @@ export default function App() {
     const deadlineInfo = getDeadlineInfo(c);
     if (filters.deadlineStatus !== 'ALL' && deadlineInfo.code !== filters.deadlineStatus) return false;
 
-    // Search Query - Full database search across all fields (FIR, SDPO Orders, CI Remarks, IO Progress Updates, Sections, Dates, Accused, etc.)
+    // Search Query - Full database search across all fields
     if (filters.searchQuery && filters.searchQuery.trim()) {
       if (!matchesCaseFullDatabaseSearch(c, filters.searchQuery)) {
         return false;
@@ -851,15 +853,17 @@ export default function App() {
     }
 
     // FIR Date range
-    if (filters.startDate && c.firDate < filters.startDate) return false;
-    if (filters.endDate && c.firDate > filters.endDate) return false;
+    const firDate = c?.firDate || '';
+    if (filters.startDate && firDate < filters.startDate) return false;
+    if (filters.endDate && firDate > filters.endDate) return false;
 
     // Chargesheet Date range
+    const csDate = c?.chargesheetDate || '';
     if (filters.chargesheetStartDate) {
-      if (!c.chargesheetDate || c.chargesheetDate < filters.chargesheetStartDate) return false;
+      if (!csDate || csDate < filters.chargesheetStartDate) return false;
     }
     if (filters.chargesheetEndDate) {
-      if (!c.chargesheetDate || c.chargesheetDate > filters.chargesheetEndDate) return false;
+      if (!csDate || csDate > filters.chargesheetEndDate) return false;
     }
 
     return true;
@@ -869,18 +873,21 @@ export default function App() {
     setFilters((prev) => ({ ...prev, ...newFilters }));
   };
 
-  // Global overdue count
+  // Global overdue count with safety
   const overdueCount = cases.filter((c) => {
+    if (!c) return false;
     if (activePS && c.ps !== activePS) return false;
     return getDeadlineInfo(c).code === 'OVERDUE';
   }).length;
 
   const pendingSRCount = cases.filter((c) => {
+    if (!c) return false;
     if (activePS && c.ps !== activePS) return false;
     return c.designation === 'SR' && c.status === 'Under Investigation';
   }).length;
 
   const pendingLandDisputesCount = landDisputes.filter((l) => {
+    if (!l) return false;
     if (activePS && l.ps !== activePS) return false;
     return l.status === 'Pending';
   }).length;
@@ -914,10 +921,10 @@ export default function App() {
     );
   }
 
-  // Count unread messages for current user
   const currentUserId = currentUserAccount?.userId || currentRole;
   const unreadMessagesCount = messages.filter(
     (m) =>
+      m &&
       (m.recipientUserId === 'ALL' ||
         m.recipientUserId === currentUserId ||
         m.recipientUserId === currentRole) &&
@@ -951,7 +958,6 @@ export default function App() {
       {/* Main Body Layout */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         
-        {/* Tab 1: Dashboard Stats */}
         {activeTab === 'dashboard' && (
           <DashboardStats
             cases={cases}
@@ -966,7 +972,6 @@ export default function App() {
           />
         )}
 
-        {/* Tab 2: FIR & Case Register */}
         {activeTab === 'firs' && (
           <div className="space-y-4">
             <FIRFilterBar
@@ -991,17 +996,15 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 3: 60/90 Days Deadline Monitor */}
         {activeTab === 'deadlines' && (
           <DeadlineMonitor
-            cases={activePS ? cases.filter((c) => c.ps === activePS) : cases}
+            cases={activePS ? cases.filter((c) => c?.ps === activePS) : cases}
             onViewCase={(c) => setViewingCase(c)}
             onEditCase={(c) => setEditingCase(c)}
             isReadOnly={isReadOnly}
           />
         )}
 
-        {/* Tab 4: Land Dispute Register */}
         {activeTab === 'land_disputes' && (
           <LandDisputeSection
             landDisputes={landDisputes}
@@ -1015,11 +1018,10 @@ export default function App() {
           />
         )}
 
-        {/* Tab 5: UD & NON-SR Desk */}
         {activeTab === 'ud_cases' && (
           <UDCaseSection
             udCases={udCases}
-            nonSrCases={cases.filter((c) => c.designation === 'NON_SR')}
+            nonSrCases={cases.filter((c) => c?.designation === 'NON_SR')}
             currentRole={currentRole}
             onAddUDCase={handleAddUDCase}
             onUpdateUDCase={handleUpdateUDCase}
@@ -1030,7 +1032,6 @@ export default function App() {
           />
         )}
 
-        {/* Supervision Status Tab (Super User / SDPO Only) */}
         {activeTab === 'supervision' && currentRole === 'SDPO' && (
           <SupervisionStatusSection
             cases={cases}
@@ -1043,7 +1044,6 @@ export default function App() {
           />
         )}
 
-        {/* Tab 6: IO List & Allocation */}
         {activeTab === 'ios' && (
           <IOManagement
             ios={ios}
@@ -1065,7 +1065,6 @@ export default function App() {
           />
         )}
 
-        {/* Tab 7: Daily PS Crime Reports */}
         {activeTab === 'daily_reports' && (
           <DailyCrimeReportSection
             reports={dailyReports}
@@ -1091,7 +1090,6 @@ export default function App() {
           />
         )}
 
-        {/* Tab 8: Embedded AI Assistant */}
         {activeTab === 'ai_assistant' && (
           <AIChatbot
             cases={cases}
@@ -1108,7 +1106,6 @@ export default function App() {
 
       </main>
 
-      {/* Floating AI Chatbot Widget (active on other tabs) */}
       {activeTab !== 'ai_assistant' && (
         <AIChatbot
           cases={cases}
