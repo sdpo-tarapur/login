@@ -21,10 +21,10 @@ export interface DutyRosterEntry {
 export type DutyTimeCategory = 'ALL' | 'MORNING' | 'DAY_EVENING' | 'NIGHT' | 'CUSTOM';
 
 /**
- * Normalizes time string to categorize shift into Morning, Day/Evening, or Night
+ * Normalizes time string to categorize shift into Morning, Day/Evening, or Night with null protection
  */
-export function categorizeDutyTime(timeSlot: string, shiftName: string): 'MORNING' | 'DAY_EVENING' | 'NIGHT' | 'CUSTOM' {
-  const text = `${timeSlot} ${shiftName}`.toLowerCase();
+export function categorizeDutyTime(timeSlot: string = '', shiftName: string = ''): 'MORNING' | 'DAY_EVENING' | 'NIGHT' | 'CUSTOM' {
+  const text = `${timeSlot || ''} ${shiftName || ''}`.toLowerCase();
   if (text.includes('night') || text.includes('22:') || text.includes('23:') || text.includes('00:') || text.includes('01:') || text.includes('02:') || text.includes('03:') || text.includes('04:') || text.includes('05:')) {
     return 'NIGHT';
   }
@@ -38,26 +38,29 @@ export function categorizeDutyTime(timeSlot: string, shiftName: string): 'MORNIN
 }
 
 /**
- * Extracts and unifies all OD & Gasti duty records across all DailyCrimeReports
+ * Extracts and unifies all OD & Gasti duty records across all DailyCrimeReports safely
  */
 export function extractAllDutyRecords(reports: DailyCrimeReport[]): DutyRosterEntry[] {
   const entries: DutyRosterEntry[] = [];
 
+  if (!Array.isArray(reports)) return entries;
+
   reports.forEach((r) => {
-    const reportDate = r.date;
-    const ps = r.ps;
+    if (!r) return;
+    const reportDate = r.date || '';
+    const ps = r.ps || 'Tarapur';
     const submittedBy = r.submittedBy || `SHO ${ps} PS`;
 
     // 1. Extract OD (Officer on Duty) records
     if (r.odDetails) {
-      if (r.odDetails.odShifts && r.odDetails.odShifts.length > 0) {
+      if (Array.isArray(r.odDetails.odShifts) && r.odDetails.odShifts.length > 0) {
         r.odDetails.odShifts.forEach((shift, index) => {
-          if (shift.ioName && shift.ioName.trim()) {
+          if (shift && shift.ioName && typeof shift.ioName === 'string' && shift.ioName.trim()) {
             const shiftName = shift.shiftName || `OD ${index + 1}`;
             const timeSlot = shift.timeSlot || (index === 0 ? '06:00 - 14:00' : index === 1 ? '14:00 - 22:00' : '22:00 - 06:00');
             entries.push({
               id: shift.id || `${r.id}-od-${index}`,
-              reportId: r.id,
+              reportId: r.id || 'unknown',
               date: reportDate,
               ps,
               dutyType: 'OD',
@@ -73,12 +76,12 @@ export function extractAllDutyRecords(reports: DailyCrimeReport[]): DutyRosterEn
         });
       } else {
         // Legacy fallback
-        if (r.odDetails.od1IoName && r.odDetails.od1IoName.trim()) {
+        if (r.odDetails.od1IoName && typeof r.odDetails.od1IoName === 'string' && r.odDetails.od1IoName.trim()) {
           const shiftName = 'OD 1 (Day Shift)';
           const timeSlot = '06:00 - 14:00';
           entries.push({
             id: `${r.id}-od-1`,
-            reportId: r.id,
+            reportId: r.id || 'unknown',
             date: reportDate,
             ps,
             dutyType: 'OD',
@@ -89,12 +92,12 @@ export function extractAllDutyRecords(reports: DailyCrimeReport[]): DutyRosterEn
             submittedBy,
           });
         }
-        if (r.odDetails.od2IoName && r.odDetails.od2IoName.trim()) {
+        if (r.odDetails.od2IoName && typeof r.odDetails.od2IoName === 'string' && r.odDetails.od2IoName.trim()) {
           const shiftName = 'OD 2 (Evening Shift)';
           const timeSlot = '14:00 - 22:00';
           entries.push({
             id: `${r.id}-od-2`,
-            reportId: r.id,
+            reportId: r.id || 'unknown',
             date: reportDate,
             ps,
             dutyType: 'OD',
@@ -105,12 +108,12 @@ export function extractAllDutyRecords(reports: DailyCrimeReport[]): DutyRosterEn
             submittedBy,
           });
         }
-        if (r.odDetails.od3IoName && r.odDetails.od3IoName.trim()) {
+        if (r.odDetails.od3IoName && typeof r.odDetails.od3IoName === 'string' && r.odDetails.od3IoName.trim()) {
           const shiftName = 'OD 3 (Night Shift)';
           const timeSlot = '22:00 - 06:00';
           entries.push({
             id: `${r.id}-od-3`,
-            reportId: r.id,
+            reportId: r.id || 'unknown',
             date: reportDate,
             ps,
             dutyType: 'OD',
@@ -126,14 +129,14 @@ export function extractAllDutyRecords(reports: DailyCrimeReport[]): DutyRosterEn
 
     // 2. Extract GASTI (Patrol) records
     if (r.gastiDetails) {
-      if (r.gastiDetails.gastiShifts && r.gastiDetails.gastiShifts.length > 0) {
+      if (Array.isArray(r.gastiDetails.gastiShifts) && r.gastiDetails.gastiShifts.length > 0) {
         r.gastiDetails.gastiShifts.forEach((shift, index) => {
-          if (shift.ioName && shift.ioName.trim()) {
+          if (shift && shift.ioName && typeof shift.ioName === 'string' && shift.ioName.trim()) {
             const shiftName = shift.shiftName || `Gasti Shift ${index + 1}`;
             const timeSlot = shift.timeSlot || (index === 0 ? '06:00 - 14:00' : index === 1 ? '14:00 - 22:00' : '22:00 - 06:00');
             entries.push({
               id: shift.id || `${r.id}-gasti-${index}`,
-              reportId: r.id,
+              reportId: r.id || 'unknown',
               date: reportDate,
               ps,
               dutyType: 'GASTI',
@@ -152,12 +155,12 @@ export function extractAllDutyRecords(reports: DailyCrimeReport[]): DutyRosterEn
         });
       } else {
         // Legacy fallback
-        if (r.gastiDetails.morningGastiIoName && r.gastiDetails.morningGastiIoName.trim()) {
+        if (r.gastiDetails.morningGastiIoName && typeof r.gastiDetails.morningGastiIoName === 'string' && r.gastiDetails.morningGastiIoName.trim()) {
           const shiftName = 'Morning Gasti';
           const timeSlot = '06:00 - 14:00';
           entries.push({
             id: `${r.id}-gasti-m`,
-            reportId: r.id,
+            reportId: r.id || 'unknown',
             date: reportDate,
             ps,
             dutyType: 'GASTI',
@@ -168,12 +171,12 @@ export function extractAllDutyRecords(reports: DailyCrimeReport[]): DutyRosterEn
             submittedBy,
           });
         }
-        if (r.gastiDetails.dayGastiIoName && r.gastiDetails.dayGastiIoName.trim()) {
+        if (r.gastiDetails.dayGastiIoName && typeof r.gastiDetails.dayGastiIoName === 'string' && r.gastiDetails.dayGastiIoName.trim()) {
           const shiftName = 'Day / Mobile Gasti';
           const timeSlot = '14:00 - 22:00';
           entries.push({
             id: `${r.id}-gasti-d`,
-            reportId: r.id,
+            reportId: r.id || 'unknown',
             date: reportDate,
             ps,
             dutyType: 'GASTI',
@@ -184,12 +187,12 @@ export function extractAllDutyRecords(reports: DailyCrimeReport[]): DutyRosterEn
             submittedBy,
           });
         }
-        if (r.gastiDetails.nightGastiIoName && r.gastiDetails.nightGastiIoName.trim()) {
+        if (r.gastiDetails.nightGastiIoName && typeof r.gastiDetails.nightGastiIoName === 'string' && r.gastiDetails.nightGastiIoName.trim()) {
           const shiftName = 'Night Gasti / Nakabandi';
           const timeSlot = '22:00 - 06:00';
           entries.push({
             id: `${r.id}-gasti-n`,
-            reportId: r.id,
+            reportId: r.id || 'unknown',
             date: reportDate,
             ps,
             dutyType: 'GASTI',
@@ -206,15 +209,17 @@ export function extractAllDutyRecords(reports: DailyCrimeReport[]): DutyRosterEn
 
   // Sort descending by date, then by shift
   return entries.sort((a, b) => {
-    if (b.date !== a.date) {
-      return b.date.localeCompare(a.date);
+    const dateB = b.date || '';
+    const dateA = a.date || '';
+    if (dateB !== dateA) {
+      return dateB.localeCompare(dateA);
     }
-    return a.dutyType.localeCompare(b.dutyType);
+    return (a.dutyType || '').localeCompare(b.dutyType || '');
   });
 }
 
 /**
- * Filter duty records based on user search parameters
+ * Filter duty records based on user search parameters safely
  */
 export function filterDutyRecords(
   records: DutyRosterEntry[],
@@ -228,47 +233,55 @@ export function filterDutyRecords(
     searchQuery?: string;
   }
 ): DutyRosterEntry[] {
+  if (!Array.isArray(records)) return [];
+  const safeFilters = filters || {};
+
   return records.filter((rec) => {
+    if (!rec) return false;
+
     // 1. Date Range
-    if (filters.startDate && rec.date < filters.startDate) return false;
-    if (filters.endDate && rec.date > filters.endDate) return false;
+    const recDate = rec.date || '';
+    if (safeFilters.startDate && recDate < safeFilters.startDate) return false;
+    if (safeFilters.endDate && recDate > safeFilters.endDate) return false;
 
     // 2. Police Station
-    if (filters.policeStation && filters.policeStation !== 'ALL' && rec.ps !== filters.policeStation) {
+    if (safeFilters.policeStation && safeFilters.policeStation !== 'ALL' && rec.ps !== safeFilters.policeStation) {
       return false;
     }
 
     // 3. IO Name
-    if (filters.ioName && filters.ioName !== 'ALL') {
-      if (rec.ioName.toLowerCase() !== filters.ioName.toLowerCase()) {
+    if (safeFilters.ioName && safeFilters.ioName !== 'ALL') {
+      const recIo = (rec.ioName || '').toLowerCase();
+      const targetIo = safeFilters.ioName.toLowerCase();
+      if (recIo !== targetIo) {
         return false;
       }
     }
 
     // 4. Duty Type (OD vs GASTI)
-    if (filters.dutyType && filters.dutyType !== 'ALL' && rec.dutyType !== filters.dutyType) {
+    if (safeFilters.dutyType && safeFilters.dutyType !== 'ALL' && rec.dutyType !== safeFilters.dutyType) {
       return false;
     }
 
     // 5. Time Category (Morning, Day/Evening, Night)
-    if (filters.timeCategory && filters.timeCategory !== 'ALL') {
+    if (safeFilters.timeCategory && safeFilters.timeCategory !== 'ALL') {
       const cat = categorizeDutyTime(rec.timeSlot, rec.shiftName);
-      if (cat !== filters.timeCategory) {
+      if (cat !== safeFilters.timeCategory) {
         return false;
       }
     }
 
     // 6. Search Query
-    if (filters.searchQuery && filters.searchQuery.trim()) {
-      const q = filters.searchQuery.toLowerCase().trim();
+    if (safeFilters.searchQuery && safeFilters.searchQuery.trim()) {
+      const q = safeFilters.searchQuery.toLowerCase().trim();
       const match =
-        rec.ioName.toLowerCase().includes(q) ||
-        rec.shiftName.toLowerCase().includes(q) ||
-        rec.timeSlot.toLowerCase().includes(q) ||
+        (rec.ioName || '').toLowerCase().includes(q) ||
+        (rec.shiftName || '').toLowerCase().includes(q) ||
+        (rec.timeSlot || '').toLowerCase().includes(q) ||
         (rec.sectorArea && rec.sectorArea.toLowerCase().includes(q)) ||
         (rec.vehicleNumber && rec.vehicleNumber.toLowerCase().includes(q)) ||
         (rec.remarks && rec.remarks.toLowerCase().includes(q)) ||
-        rec.ps.toLowerCase().includes(q);
+        (rec.ps || '').toLowerCase().includes(q);
       if (!match) return false;
     }
 
