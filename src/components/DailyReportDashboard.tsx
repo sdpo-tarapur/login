@@ -234,8 +234,8 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
   }, [relevantReports, todayStr]);
 
   // Monthly reports
-  const currentMonthReports = useMemo(() => {
-    return relevantReports.filter((r) => r.date.startsWith(currentMonthKey));
+ const currentMonthReports = useMemo(() => {
+    return relevantReports.filter((r) => (r?.date || '').startsWith(currentMonthKey));
   }, [relevantReports, currentMonthKey]);
 
   // 1. Force Strength Aggregation (Rank-wise)
@@ -303,10 +303,10 @@ export const DailyReportDashboard: React.FC<DailyReportDashboardProps> = ({
   }, [todayReports, cases, todayStr, contextPS]);
 
   // 3. Total FIR registered in month (From FIR records database!)
-  const totalFIRInMonth = useMemo(() => {
+ const totalFIRInMonth = useMemo(() => {
     return cases.filter((c) => {
-      if (contextPS && c.ps !== contextPS) return false;
-      return c.firDate.startsWith(currentMonthKey);
+      if (contextPS && c?.ps !== contextPS) return false;
+      return (c?.firDate || '').startsWith(currentMonthKey);
     }).length;
   }, [cases, currentMonthKey, contextPS]);
 
