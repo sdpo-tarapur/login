@@ -268,7 +268,17 @@ export async function fetchUserAccountsFromSupabase(): Promise<any[] | null> {
       console.warn('Error fetching user accounts from Supabase:', error.message);
       return null;
     }
-    return data || [];
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      password: row.password,
+      role: row.role,
+      permissionLevel: row.permission_level,
+      officerName: row.officer_name,
+      rank: row.rank,
+      policeStation: row.police_station,
+      isActive: row.is_active,
+    }));
   } catch (err) {
     console.warn('Supabase exception in fetchUserAccounts:', err);
     return null;
@@ -279,7 +289,18 @@ export async function saveUserAccountToSupabase(account: any): Promise<boolean> 
   const client = getSupabase();
   if (!client) return false;
   try {
-    const { error } = await client.from('user_accounts').upsert([account]).select();
+    const payload = {
+      id: account.id,
+      user_id: account.userId || account.user_id,
+      password: account.password,
+      role: account.role,
+      permission_level: account.permissionLevel || account.permission_level,
+      officer_name: account.officerName || account.officer_name,
+      rank: account.rank,
+      police_station: account.policeStation || account.police_station,
+      is_active: account.isActive ?? account.is_active ?? true,
+    };
+    const { error } = await client.from('user_accounts').upsert([payload]).select();
     if (error) console.error('Save user account error:', error.message);
     return !error;
   } catch (err) {
@@ -321,7 +342,19 @@ export async function authenticateOfficerWithSupabase(
     }
 
     if (data && data.length > 0) {
-      return { success: true, account: data[0] };
+      const row = data[0];
+      const mappedAccount = {
+        id: row.id,
+        userId: row.user_id,
+        password: row.password,
+        role: row.role,
+        permissionLevel: row.permission_level,
+        officerName: row.officer_name,
+        rank: row.rank,
+        policeStation: row.police_station,
+        isActive: row.is_active,
+      };
+      return { success: true, account: mappedAccount };
     }
 
     return { success: false, error: 'Invalid credentials in Supabase database.' };
@@ -331,7 +364,7 @@ export async function authenticateOfficerWithSupabase(
 }
 
 // ==========================================
-// 5. FIR CASES
+// 5. FIR CASES (MAPPED TO CAMELCASE)
 // ==========================================
 
 export async function fetchFIRCasesFromSupabase(): Promise<any[] | null> {
@@ -343,7 +376,29 @@ export async function fetchFIRCasesFromSupabase(): Promise<any[] | null> {
       console.warn('Error fetching FIR cases from Supabase:', error.message);
       return null;
     }
-    return data || [];
+    // Map snake_case columns from Supabase to frontend camelCase properties
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      firNumber: row.fir_number || '',
+      firDate: row.fir_date || '',
+      ps: row.ps,
+      sections: row.sections || '',
+      ioName: row.io_name || 'Unassigned',
+      ioId: row.io_id || '',
+      complainantName: row.complainant_name || '',
+      complainantPhone: row.complainant_phone || '',
+      accusedNames: row.accused_names || '',
+      placeOfOccurrence: row.place_of_occurrence || '',
+      designation: row.designation || 'NON_SR',
+      punishmentTerm: row.punishment_term || 'less_than_7_years',
+      status: row.status || 'PENDING',
+      cctnsStatus: row.cctns_status || 'PENDING',
+      cctnsDate: row.cctns_date || '',
+      chargesheetNumber: row.chargesheet_number || '',
+      chargesheetDate: row.chargesheet_date || '',
+      finalFormType: row.final_form_type || '',
+      supervisionNotes: row.supervision_notes || '',
+    }));
   } catch (err) {
     console.warn('Supabase exception in fetchFIRCases:', err);
     return null;
@@ -354,7 +409,29 @@ export async function saveFIRCaseToSupabase(firCase: any): Promise<boolean> {
   const client = getSupabase();
   if (!client) return false;
   try {
-    const { error } = await client.from('fir_cases').upsert([firCase]).select();
+    const payload = {
+      id: firCase.id,
+      fir_number: firCase.firNumber || firCase.fir_number,
+      fir_date: firCase.firDate || firCase.fir_date,
+      ps: firCase.ps,
+      sections: firCase.sections,
+      io_name: firCase.ioName || firCase.io_name,
+      io_id: firCase.ioId || firCase.io_id,
+      complainant_name: firCase.complainantName || firCase.complainant_name,
+      complainant_phone: firCase.complainantPhone || firCase.complainant_phone,
+      accused_names: firCase.accusedNames || firCase.accused_names,
+      place_of_occurrence: firCase.placeOfOccurrence || firCase.place_of_occurrence,
+      designation: firCase.designation,
+      punishment_term: firCase.punishmentTerm || firCase.punishment_term,
+      status: firCase.status,
+      cctns_status: firCase.cctnsStatus || firCase.cctns_status,
+      cctns_date: firCase.cctnsDate || firCase.cctns_date,
+      chargesheet_number: firCase.chargesheetNumber || firCase.chargesheet_number,
+      chargesheet_date: firCase.chargesheetDate || firCase.chargesheet_date,
+      final_form_type: firCase.finalFormType || firCase.final_form_type,
+      supervision_notes: firCase.supervisionNotes || firCase.supervision_notes,
+    };
+    const { error } = await client.from('fir_cases').upsert([payload]).select();
     if (error) console.error('Save FIR case error:', error.message);
     return !error;
   } catch (err) {
@@ -387,7 +464,15 @@ export async function fetchIOsFromSupabase(): Promise<any[] | null> {
       console.warn('Error fetching IOs:', error.message);
       return null;
     }
-    return data || [];
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      rank: row.rank,
+      ps: row.ps,
+      phone: row.phone,
+      email: row.email,
+      isActive: row.is_active,
+    }));
   } catch (err) {
     console.warn('Exception fetching IOs:', err);
     return null;
@@ -398,7 +483,16 @@ export async function saveIOToSupabase(io: any): Promise<boolean> {
   const client = getSupabase();
   if (!client) return false;
   try {
-    const { error } = await client.from('investigating_officers').upsert([io]).select();
+    const payload = {
+      id: io.id,
+      name: io.name,
+      rank: io.rank,
+      ps: io.ps,
+      phone: io.phone,
+      email: io.email,
+      is_active: io.isActive ?? io.is_active ?? true,
+    };
+    const { error } = await client.from('investigating_officers').upsert([payload]).select();
     if (error) console.error('Save IO error:', error.message);
     return !error;
   } catch (err) {
@@ -431,7 +525,20 @@ export async function fetchLeaveLedgerFromSupabase(): Promise<any[] | null> {
       console.warn('Error fetching leave ledger:', error.message);
       return null;
     }
-    return data || [];
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      ps: row.ps,
+      officerName: row.officer_name,
+      rank: row.rank,
+      departureDate: row.departure_date,
+      daysOnLeave: row.days_on_leave,
+      arrivalDate: row.arrival_date,
+      status: row.status,
+      leaveType: row.leave_type,
+      remarks: row.remarks,
+      recordedBy: row.recorded_by,
+      createdAt: row.created_at,
+    }));
   } catch (err) {
     console.warn('Exception fetching leave ledger:', err);
     return null;
@@ -442,7 +549,21 @@ export async function saveLeaveLedgerEntryToSupabase(entry: any): Promise<boolea
   const client = getSupabase();
   if (!client) return false;
   try {
-    const { error } = await client.from('leave_ledger').upsert([entry]).select();
+    const payload = {
+      id: entry.id,
+      ps: entry.ps,
+      officer_name: entry.officerName || entry.officer_name,
+      rank: entry.rank,
+      departure_date: entry.departureDate || entry.departure_date,
+      days_on_leave: entry.daysOnLeave || entry.days_on_leave,
+      arrival_date: entry.arrivalDate || entry.arrival_date,
+      status: entry.status,
+      leave_type: entry.leaveType || entry.leave_type,
+      remarks: entry.remarks,
+      recorded_by: entry.recordedBy || entry.recorded_by,
+      created_at: entry.createdAt || entry.created_at,
+    };
+    const { error } = await client.from('leave_ledger').upsert([payload]).select();
     if (error) console.error('Save leave error:', error.message);
     return !error;
   } catch (err) {
