@@ -364,7 +364,7 @@ export async function authenticateOfficerWithSupabase(
 }
 
 // ==========================================
-// 5. FIR CASES (MAPPED TO CAMELCASE)
+// 5. FIR CASES (MAPPED TO & FROM SNAKE_CASE)
 // ==========================================
 
 export async function fetchFIRCasesFromSupabase(): Promise<any[] | null> {
@@ -376,7 +376,6 @@ export async function fetchFIRCasesFromSupabase(): Promise<any[] | null> {
       console.warn('Error fetching FIR cases from Supabase:', error.message);
       return null;
     }
-    // Map snake_case columns from Supabase to frontend camelCase properties
     return (data || []).map((row: any) => ({
       id: row.id,
       firNumber: row.fir_number || '',
@@ -410,20 +409,20 @@ export async function saveFIRCaseToSupabase(firCase: any): Promise<boolean> {
   if (!client) return false;
   try {
     const payload = {
-      id: firCase.id,
+      id: firCase.id || `fir-${Date.now()}`,
       fir_number: firCase.firNumber || firCase.fir_number,
       fir_date: firCase.firDate || firCase.fir_date,
       ps: firCase.ps,
       sections: firCase.sections,
       io_name: firCase.ioName || firCase.io_name,
-      io_id: firCase.ioId || firCase.io_id,
+      io_id: firCase.ioId || firCase.io_id || null,
       complainant_name: firCase.complainantName || firCase.complainant_name,
       complainant_phone: firCase.complainantPhone || firCase.complainant_phone,
       accused_names: firCase.accusedNames || firCase.accused_names,
       place_of_occurrence: firCase.placeOfOccurrence || firCase.place_of_occurrence,
-      designation: firCase.designation,
+      designation: firCase.designation || 'NON_SR',
       punishment_term: firCase.punishmentTerm || firCase.punishment_term,
-      status: firCase.status,
+      status: firCase.status || 'PENDING',
       cctns_status: firCase.cctnsStatus || firCase.cctns_status,
       cctns_date: firCase.cctnsDate || firCase.cctns_date,
       chargesheet_number: firCase.chargesheetNumber || firCase.chargesheet_number,
@@ -431,9 +430,12 @@ export async function saveFIRCaseToSupabase(firCase: any): Promise<boolean> {
       final_form_type: firCase.finalFormType || firCase.final_form_type,
       supervision_notes: firCase.supervisionNotes || firCase.supervision_notes,
     };
-    const { error } = await client.from('fir_cases').upsert([payload]).select();
-    if (error) console.error('Save FIR case error:', error.message);
-    return !error;
+    const { error } = await client.from('fir_cases').upsert([payload], { onConflict: 'id' }).select();
+    if (error) {
+      console.error('Save FIR case error:', error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('Save FIR case exception:', err);
     return false;
@@ -484,7 +486,7 @@ export async function saveIOToSupabase(io: any): Promise<boolean> {
   if (!client) return false;
   try {
     const payload = {
-      id: io.id,
+      id: io.id || `io-${Date.now()}`,
       name: io.name,
       rank: io.rank,
       ps: io.ps,
@@ -492,9 +494,12 @@ export async function saveIOToSupabase(io: any): Promise<boolean> {
       email: io.email,
       is_active: io.isActive ?? io.is_active ?? true,
     };
-    const { error } = await client.from('investigating_officers').upsert([payload]).select();
-    if (error) console.error('Save IO error:', error.message);
-    return !error;
+    const { error } = await client.from('investigating_officers').upsert([payload], { onConflict: 'id' }).select();
+    if (error) {
+      console.error('Save IO error:', error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('Save IO exception:', err);
     return false;
@@ -550,22 +555,25 @@ export async function saveLeaveLedgerEntryToSupabase(entry: any): Promise<boolea
   if (!client) return false;
   try {
     const payload = {
-      id: entry.id,
+      id: entry.id || `leave-${Date.now()}`,
       ps: entry.ps,
       officer_name: entry.officerName || entry.officer_name,
       rank: entry.rank,
       departure_date: entry.departureDate || entry.departure_date,
       days_on_leave: entry.daysOnLeave || entry.days_on_leave,
       arrival_date: entry.arrivalDate || entry.arrival_date,
-      status: entry.status,
+      status: entry.status || 'ON_LEAVE',
       leave_type: entry.leaveType || entry.leave_type,
       remarks: entry.remarks,
       recorded_by: entry.recordedBy || entry.recorded_by,
-      created_at: entry.createdAt || entry.created_at,
+      created_at: entry.createdAt || entry.created_at || new Date().toISOString(),
     };
-    const { error } = await client.from('leave_ledger').upsert([payload]).select();
-    if (error) console.error('Save leave error:', error.message);
-    return !error;
+    const { error } = await client.from('leave_ledger').upsert([payload], { onConflict: 'id' }).select();
+    if (error) {
+      console.error('Save leave error:', error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('Save leave exception:', err);
     return false;
@@ -592,13 +600,16 @@ export async function fetchLandDisputesFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('land_disputes').select('*');
-    if (error) {
-      console.warn('Error fetching land disputes:', error.message);
-      return null;
-    }
-    return data || [];
-  } catch (err) {
-    console.warn('Exception fetching land disputes:', err);
+    if (error) return null;
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      ps: row.ps,
+      partyA: row.party_a,
+      partyB: row.party_b,
+      disputeDetails: row.dispute_details,
+      status: row.status,
+    }));
+  } catch {
     return null;
   }
 }
@@ -607,11 +618,17 @@ export async function saveLandDisputeToSupabase(dispute: any): Promise<boolean> 
   const client = getSupabase();
   if (!client) return false;
   try {
-    const { error } = await client.from('land_disputes').upsert([dispute]).select();
-    if (error) console.error('Save land dispute error:', error.message);
+    const payload = {
+      id: dispute.id || `land-${Date.now()}`,
+      ps: dispute.ps,
+      party_a: dispute.partyA || dispute.party_a,
+      party_b: dispute.partyB || dispute.party_b,
+      dispute_details: dispute.disputeDetails || dispute.dispute_details,
+      status: dispute.status || 'PENDING',
+    };
+    const { error } = await client.from('land_disputes').upsert([payload], { onConflict: 'id' }).select();
     return !error;
-  } catch (err) {
-    console.error('Save land dispute exception:', err);
+  } catch {
     return false;
   }
 }
@@ -636,13 +653,15 @@ export async function fetchUDCasesFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('ud_cases').select('*');
-    if (error) {
-      console.warn('Error fetching UD cases:', error.message);
-      return null;
-    }
-    return data || [];
-  } catch (err) {
-    console.warn('Exception fetching UD cases:', err);
+    if (error) return null;
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      udNumber: row.ud_number,
+      ps: row.ps,
+      deceasedName: row.deceased_name,
+      details: row.details,
+    }));
+  } catch {
     return null;
   }
 }
@@ -651,11 +670,16 @@ export async function saveUDCaseToSupabase(udCase: any): Promise<boolean> {
   const client = getSupabase();
   if (!client) return false;
   try {
-    const { error } = await client.from('ud_cases').upsert([udCase]).select();
-    if (error) console.error('Save UD case error:', error.message);
+    const payload = {
+      id: udCase.id || `ud-${Date.now()}`,
+      ud_number: udCase.udNumber || udCase.ud_number,
+      ps: udCase.ps,
+      deceased_name: udCase.deceasedName || udCase.deceased_name,
+      details: udCase.details,
+    };
+    const { error } = await client.from('ud_cases').upsert([payload], { onConflict: 'id' }).select();
     return !error;
-  } catch (err) {
-    console.error('Save UD case exception:', err);
+  } catch {
     return false;
   }
 }
@@ -680,13 +704,24 @@ export async function fetchDailyReportsFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('daily_crime_reports').select('*');
-    if (error) {
-      console.warn('Error fetching daily reports:', error.message);
-      return null;
-    }
-    return data || [];
-  } catch (err) {
-    console.warn('Exception fetching daily reports:', err);
+    if (error) return null;
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      ps: row.ps,
+      date: row.date,
+      firsRegisteredCount: row.firs_registered_count,
+      registeredFirs: row.registered_firs,
+      odDetails: row.od_details,
+      gastiDetails: row.gasti_details,
+      arrestsCount: row.arrests_count,
+      arrestDetails: row.arrest_details,
+      rankStrengths: row.rank_strengths,
+      leaveLedgerEntries: row.leave_ledger_entries,
+      seizuresSummary: row.seizures_summary,
+      majorIncidentsNotes: row.major_incidents_notes,
+      submittedBy: row.submitted_by,
+    }));
+  } catch {
     return null;
   }
 }
@@ -695,9 +730,28 @@ export async function saveDailyReportToSupabase(report: any): Promise<boolean> {
   const client = getSupabase();
   if (!client) return false;
   try {
-    const { error } = await client.from('daily_crime_reports').upsert([report]).select();
-    if (error) console.error('Save daily report error:', error.message);
-    return !error;
+    const payload = {
+      id: report.id || `report-${Date.now()}`,
+      ps: report.ps,
+      date: report.date,
+      firs_registered_count: report.firsRegisteredCount ?? report.firs_registered_count ?? 0,
+      registered_firs: report.registeredFirs || report.registered_firs || [],
+      od_details: report.odDetails || report.od_details || {},
+      gasti_details: report.gastiDetails || report.gasti_details || {},
+      arrests_count: report.arrestsCount ?? report.arrests_count ?? 0,
+      arrest_details: report.arrestDetails || report.arrest_details || {},
+      rank_strengths: report.rankStrengths || report.rank_strengths || [],
+      leave_ledger_entries: report.leaveLedgerEntries || report.leave_ledger_entries || [],
+      seizures_summary: report.seizuresSummary || report.seizures_summary || null,
+      major_incidents_notes: report.majorIncidentsNotes || report.major_incidents_notes || null,
+      submitted_by: report.submittedBy || report.submitted_by || '',
+    };
+    const { error } = await client.from('daily_crime_reports').upsert([payload], { onConflict: 'id' }).select();
+    if (error) {
+      console.error('Save daily report error:', error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('Save daily report exception:', err);
     return false;
@@ -724,13 +778,21 @@ export async function fetchUserMessagesFromSupabase(): Promise<any[] | null> {
   if (!client) return null;
   try {
     const { data, error } = await client.from('user_messages').select('*');
-    if (error) {
-      console.warn('Error fetching user messages:', error.message);
-      return null;
-    }
-    return data || [];
-  } catch (err) {
-    console.warn('Exception fetching user messages:', err);
+    if (error) return null;
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      senderUserId: row.sender_user_id,
+      senderName: row.sender_name,
+      senderRole: row.sender_role,
+      recipientUserId: row.recipient_user_id,
+      recipientName: row.recipient_name,
+      subject: row.subject,
+      messageText: row.message_text,
+      priority: row.priority,
+      readBy: row.read_by,
+      createdAt: row.created_at,
+    }));
+  } catch {
     return null;
   }
 }
@@ -739,11 +801,22 @@ export async function saveUserMessageToSupabase(msg: any): Promise<boolean> {
   const client = getSupabase();
   if (!client) return false;
   try {
-    const { error } = await client.from('user_messages').upsert([msg]).select();
-    if (error) console.error('Save message error:', error.message);
+    const payload = {
+      id: msg.id || `msg-${Date.now()}`,
+      sender_user_id: msg.senderUserId || msg.sender_user_id,
+      sender_name: msg.senderName || msg.sender_name,
+      sender_role: msg.senderRole || msg.sender_role,
+      recipient_user_id: msg.recipientUserId || msg.recipient_user_id,
+      recipient_name: msg.recipientName || msg.recipient_name,
+      subject: msg.subject,
+      message_text: msg.messageText || msg.message_text,
+      priority: msg.priority || 'Routine',
+      read_by: msg.readBy || msg.read_by || [],
+      created_at: msg.createdAt || msg.created_at || new Date().toISOString(),
+    };
+    const { error } = await client.from('user_messages').upsert([payload], { onConflict: 'id' }).select();
     return !error;
-  } catch (err) {
-    console.error('Save message exception:', err);
+  } catch {
     return false;
   }
 }
